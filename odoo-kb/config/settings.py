@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # Conversation context
     conversation_ttl_seconds: int = 1800  # 30 minutes
 
+    # Caching
+    embedding_cache_size: int = 5000
+    embedding_cache_ttl: int = 3600  # 1 hour
+    search_cache_size: int = 500
+    search_cache_ttl: int = 120  # 2 minutes
+
     # Enrichment
     enrichment_enabled: bool = False
     tavily_api_key: str = ""

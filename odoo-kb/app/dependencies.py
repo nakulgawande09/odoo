@@ -18,6 +18,8 @@ _embedder: Any = None
 _preprocessor: Any = None
 _orchestrator: Any = None
 _pipeline: Any = None
+_query_logger: Any = None
+_cache_stats_fn: Any = None
 
 
 def set_services(
@@ -26,13 +28,18 @@ def set_services(
     preprocessor: Any,
     orchestrator: Any,
     pipeline: Any,
+    query_logger: Any = None,
+    cache_stats_fn: Any = None,
 ) -> None:
     global _backend, _embedder, _preprocessor, _orchestrator, _pipeline
+    global _query_logger, _cache_stats_fn
     _backend = backend
     _embedder = embedder
     _preprocessor = preprocessor
     _orchestrator = orchestrator
     _pipeline = pipeline
+    _query_logger = query_logger
+    _cache_stats_fn = cache_stats_fn
 
 
 def get_backend():
@@ -53,3 +60,13 @@ def get_orchestrator():
 
 def get_pipeline():
     return _pipeline
+
+
+def get_query_logger():
+    return _query_logger
+
+
+def get_cache_stats():
+    if _cache_stats_fn:
+        return _cache_stats_fn()
+    return None

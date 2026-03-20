@@ -1,4 +1,4 @@
-"""Search orchestrator: preprocess -> expand -> embed -> fan out -> rerank -> enrich."""
+"""Search orchestrator: preprocess -> expand -> embed -> fan out -> rerank -> enrich -> log."""
 from __future__ import annotations
 
 import asyncio
@@ -19,11 +19,8 @@ logger = logging.getLogger(__name__)
 class SearchOrchestrator:
     """Coordinates search across preprocessing, backends, and enrichment.
 
-    Phase 2 additions:
-    - Conversation context (pronoun resolution, filter carry-over)
-    - Query expansion (synonyms/related terms)
-    - Semantic reranking (cross-encoder second-stage)
-    - Weighted multi-backend scoring
+    Phase 2: conversation context, query expansion, reranking, weighted backends
+    Phase 3: query logging, search caching, tenant isolation
     """
 
     def __init__(
@@ -36,6 +33,8 @@ class SearchOrchestrator:
         conversation_tracker: Any | None = None,
         query_expander: Any | None = None,
         backend_weights: dict[str, float] | None = None,
+        query_logger: Any | None = None,
+        search_cache: Any | None = None,
     ) -> None:
         self.preprocessor = preprocessor
         self.embedder = embedder
@@ -44,11 +43,20 @@ class SearchOrchestrator:
         self.reranker = reranker
         self.conversation_tracker = conversation_tracker
         self.query_expander = query_expander
-        # Weight each backend's scores (default 1.0 = equal weight)
         self.backend_weights = backend_weights or {}
+        self.query_logger = query_logger
+        self.search_cache = search_cache
 
     async def search(self, request: SearchRequest) -> SearchResponse:
         start = time.monotonic()
+
+        # Check search cache first
+        if self.search_cache:
+            cached = self.search_cache.get(
+                request.query, request.filters, request.limit, request.offset
+            )
+            if cached is not None:
+                return cached
 
         # 0. Expand query with conversation context (pronoun resolution)
         effective_query = request.query
@@ -67,6 +75,9 @@ class SearchOrchestrator:
             context={"source": request.source, "conversation_id": request.conversation_id},
         )
 
+        # Pass tenant_id through to backends
+        processed.tenant_id = request.tenant_id
+
         # Merge context filters < extracted filters < caller-provided filters
         merged_filters = {**context_filters, **processed.filters}
         if request.filters:
@@ -83,7 +94,6 @@ class SearchOrchestrator:
         processed.embedding = await self.embedder.embed(processed.search_text)
 
         # 4. Fan out to all backends in parallel
-        # Request more results than needed if reranking (reranker needs candidates)
         retrieval_limit = request.limit
         if self.reranker:
             retrieval_limit = max(request.limit * 3, 30)
@@ -103,7 +113,6 @@ class SearchOrchestrator:
                 continue
             backends_used.append(backend.name)
 
-            # Apply backend weight to scores
             weight = self.backend_weights.get(backend.name, 1.0)
             if weight != 1.0:
                 result = [
@@ -128,7 +137,7 @@ class SearchOrchestrator:
         # 8. Final ranking and limit
         ranked = self._rank_and_limit(unique, request.limit)
 
-        # 9. Enrich (optional: entity linking, fact-checking)
+        # 9. Enrich (optional: entity linking, fact-checking, web search)
         enrichment_data = None
         if self.enrichment_providers and ranked:
             enrichment_data, ranked = await self._enrich(request.query, ranked)
@@ -144,7 +153,7 @@ class SearchOrchestrator:
 
         elapsed_ms = (time.monotonic() - start) * 1000
 
-        return SearchResponse(
+        response = SearchResponse(
             query=request.query,
             parsed_intent=processed.intent,
             parsed_filters=processed.filters,
@@ -155,8 +164,33 @@ class SearchOrchestrator:
             enrichment=enrichment_data,
         )
 
+        # 11. Log query (fire-and-forget)
+        if self.query_logger:
+            asyncio.create_task(
+                self.query_logger.log(
+                    query=request.query,
+                    processed_query={
+                        "intent": processed.intent,
+                        "filters": processed.filters,
+                        "search_text": processed.search_text,
+                    },
+                    results_count=len(ranked),
+                    source=request.source,
+                    conversation_id=request.conversation_id,
+                    search_time_ms=elapsed_ms,
+                    tenant_id=request.tenant_id,
+                )
+            )
+
+        # 12. Cache response
+        if self.search_cache:
+            self.search_cache.put(
+                request.query, request.filters, request.limit, request.offset, response
+            )
+
+        return response
+
     def _deduplicate(self, results: list[SearchResultItem]) -> list[SearchResultItem]:
-        """Remove duplicate chunks, keeping the highest-scored version."""
         seen: dict[str, SearchResultItem] = {}
         for item in results:
             key = item.chunk_id or f"{item.document_id}:{item.snippet[:50]}"
@@ -167,14 +201,12 @@ class SearchOrchestrator:
     def _rank_and_limit(
         self, results: list[SearchResultItem], limit: int
     ) -> list[SearchResultItem]:
-        """Sort by relevance score and apply limit."""
         results.sort(key=lambda x: x.relevance_score, reverse=True)
         return results[:limit]
 
     async def _enrich(
         self, query: str, results: list[SearchResultItem]
     ) -> tuple[dict[str, Any] | None, list[SearchResultItem]]:
-        """Run enrichment providers. Returns (metadata, possibly-updated results)."""
         enrichment: dict[str, Any] = {}
         current_results = results
 

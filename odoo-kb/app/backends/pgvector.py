@@ -55,7 +55,19 @@ class PgVectorBackend:
         async with self._session_factory() as session:
             # Cosine distance search using pgvector's <=> operator
             embedding_str = f"[{','.join(str(x) for x in query.embedding)}]"
-            stmt = text("""
+
+            # Tenant isolation: filter by tenant_id when provided
+            tenant_clause = ""
+            params: dict = {
+                "embedding": embedding_str,
+                "limit": limit,
+                "offset": offset,
+            }
+            if query.tenant_id:
+                tenant_clause = "AND (d.tenant_id = :tenant_id OR d.tenant_id IS NULL)"
+                params["tenant_id"] = query.tenant_id
+
+            stmt = text(f"""
                 SELECT
                     c.id AS chunk_id,
                     c.document_id,
@@ -72,17 +84,11 @@ class PgVectorBackend:
                 FROM kb_chunks c
                 JOIN kb_documents d ON d.id = c.document_id
                 WHERE d.status = 'indexed'
+                {tenant_clause}
                 ORDER BY c.embedding <=> :embedding::vector
                 LIMIT :limit OFFSET :offset
             """)
-            result = await session.execute(
-                stmt,
-                {
-                    "embedding": embedding_str,
-                    "limit": limit,
-                    "offset": offset,
-                },
-            )
+            result = await session.execute(stmt, params)
             rows = result.mappings().all()
 
         items = []

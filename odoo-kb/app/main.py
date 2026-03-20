@@ -10,8 +10,10 @@ from app.api.auth import configure_auth
 from app.api.v1.router import router as v1_router
 from app.backends.pgvector import PgVectorBackend
 from app.backends.registry import create_backend
+from app.core.cache import CachedEmbedder, EmbeddingCache, SearchCache
 from app.core.conversation import ConversationTracker
 from app.core.query_expansion import create_query_expander
+from app.core.query_logger import QueryLogger
 from app.core.query_preprocessor import create_preprocessor
 from app.core.reranker import create_reranker
 from app.core.search_service import SearchOrchestrator
@@ -49,31 +51,59 @@ async def lifespan(app: FastAPI):
     if hasattr(backend, "initialize") and not isinstance(backend, PgVectorBackend):
         await backend.initialize()
 
-    # Create embedder
-    embedder = create_embedder(settings)
+    # Create embedder with caching layer
+    raw_embedder = create_embedder(settings)
+    embedding_cache = EmbeddingCache(
+        max_size=getattr(settings, "embedding_cache_size", 5000),
+        ttl_seconds=getattr(settings, "embedding_cache_ttl", 3600),
+    )
+    embedder = CachedEmbedder(raw_embedder, embedding_cache)
+
+    # Create search cache
+    search_cache = SearchCache(
+        max_size=getattr(settings, "search_cache_size", 500),
+        ttl_seconds=getattr(settings, "search_cache_ttl", 120),
+    )
 
     # Create preprocessor
     taxonomy = load_filter_taxonomy(settings.filter_taxonomy_path)
     preprocessor = create_preprocessor(settings, taxonomy)
 
-    # Phase 2: Create reranker (optional)
+    # Create reranker (optional)
     reranker = create_reranker(settings)
 
-    # Phase 2: Create conversation tracker
+    # Create conversation tracker
     conversation_tracker = ConversationTracker(
         ttl_seconds=settings.conversation_ttl_seconds
     )
 
-    # Phase 2: Create query expander
+    # Create query expander
     query_expander = create_query_expander(settings)
 
-    # Phase 2: Create enrichment providers
-    enrichment_providers = []
-    if settings.enrichment_enabled and settings.odoo_url:
-        from app.enrichment.odoo_linker import OdooEntityLinker
-        enrichment_providers.append(OdooEntityLinker(settings))
+    # Create query logger
+    session_factory = None
+    if isinstance(backend, PgVectorBackend):
+        session_factory = backend._session_factory
+    query_logger = QueryLogger(session_factory=session_factory)
 
-    # Create search orchestrator (with Phase 2 enhancements)
+    # Create enrichment providers
+    enrichment_providers = []
+    if settings.enrichment_enabled:
+        if settings.odoo_url:
+            from app.enrichment.odoo_linker import OdooEntityLinker
+            enrichment_providers.append(OdooEntityLinker(settings))
+        if settings.tavily_api_key:
+            from app.enrichment.tavily_web import TavilyEnrichmentProvider
+            enrichment_providers.append(TavilyEnrichmentProvider(settings))
+
+    # Cache stats aggregator
+    def cache_stats():
+        return {
+            "embedding_cache": embedding_cache.stats,
+            "search_cache": search_cache.stats,
+        }
+
+    # Create search orchestrator
     orchestrator = SearchOrchestrator(
         preprocessor=preprocessor,
         embedder=embedder,
@@ -83,9 +113,11 @@ async def lifespan(app: FastAPI):
         conversation_tracker=conversation_tracker,
         query_expander=query_expander,
         backend_weights=settings.backend_weights,
+        query_logger=query_logger,
+        search_cache=search_cache,
     )
 
-    # Create ingestion pipeline
+    # Create ingestion pipeline (uses raw embedder, not cached)
     chunker = RecursiveChunker(
         max_chunk_size=settings.chunk_size,
         overlap=settings.chunk_overlap,
@@ -103,10 +135,13 @@ async def lifespan(app: FastAPI):
         preprocessor=preprocessor,
         orchestrator=orchestrator,
         pipeline=pipeline,
+        query_logger=query_logger,
+        cache_stats_fn=cache_stats,
     )
 
     logger.info(
-        "KB service started (backend=%s, embedder=%s, reranker=%s, expander=%s)",
+        "KB service started (backend=%s, embedder=%s, reranker=%s, "
+        "expander=%s, cache=enabled, logging=enabled)",
         settings.search_backend,
         settings.embedding_provider,
         settings.reranker_provider,
@@ -127,9 +162,10 @@ def create_app() -> FastAPI:
         description=(
             "Abstraction layer for knowledge base search. "
             "Provides a stable search interface with swappable backends, "
-            "semantic reranking, conversation context, and query expansion."
+            "semantic reranking, conversation context, query expansion, "
+            "caching, analytics, and multi-tenant isolation."
         ),
-        version="0.2.0",
+        version="0.3.0",
         lifespan=lifespan,
     )
     app.include_router(v1_router)

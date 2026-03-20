@@ -14,6 +14,7 @@ class SearchRequest(BaseModel):
     filters: dict[str, str | list[str]] | None = None
     source: str = "generic"  # "livechat", "chatbot", "whatsapp", "agent"
     conversation_id: str | None = None
+    tenant_id: str | None = None
 
 
 class ProcessedQuery(BaseModel):
@@ -24,6 +25,7 @@ class ProcessedQuery(BaseModel):
     embedding: list[float] | None = None
     filters: dict[str, str | list[str]] = Field(default_factory=dict)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    tenant_id: str | None = None
 
 
 class ConnectedEntity(BaseModel):
