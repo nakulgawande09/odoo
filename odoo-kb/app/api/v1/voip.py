@@ -9,9 +9,8 @@ Architecture:
                                  /v1/voip/twilio → TwiML response
                                  /v1/voip/vonage → Vonage NCCO response
 
-The VOIP layer translates between provider-specific formats and
-the KB search API, adding call-context metadata (caller number,
-call duration, IVR path) for analytics and personalization.
+Voice agent configs are pushed from Odoo UI via PUT /v1/voip/agents/{id}
+and used at runtime to customize behavior (greeting, escalation, etc.).
 """
 from __future__ import annotations
 
@@ -20,11 +19,12 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from app.api.auth import verify_api_key
-from app.dependencies import get_orchestrator, get_query_logger
+from app.core.voice_agent_config import VoiceAgentConfig, VoiceAgentStore
+from app.dependencies import get_orchestrator, get_query_logger, get_voice_agent_store
 from app.schemas.search import SearchRequest
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class VOIPQueryRequest(BaseModel):
     provider: str = "generic"  # "twilio", "vonage", "asterisk", "generic"
     language: str = "en"
     max_results: int = Field(default=3, ge=1, le=10)
+    agent_id: int | None = None
     context: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -63,6 +64,44 @@ class VOIPQueryResponse(BaseModel):
     intent: str | None = None
     follow_up: str | None = None  # Suggested follow-up question
     response_time_ms: float
+    agent_name: str | None = None
+
+
+# ─── Agent Config CRUD ────────────────────────────────────────
+
+@router.put("/voip/agents/{agent_id}")
+async def upsert_agent_config(
+    agent_id: int,
+    config: dict[str, Any],
+    _api_key: str | None = Depends(verify_api_key),
+) -> dict:
+    """Create or update a voice agent configuration (pushed from Odoo UI)."""
+    store = get_voice_agent_store()
+    agent = store.put(agent_id, config)
+    return {"status": "ok", "agent_id": agent.agent_id, "name": agent.name}
+
+
+@router.get("/voip/agents")
+async def list_agent_configs(
+    _api_key: str | None = Depends(verify_api_key),
+) -> list[dict]:
+    """List all voice agent configurations."""
+    store = get_voice_agent_store()
+    return [
+        {"agent_id": a.agent_id, "name": a.name, "provider": a.provider}
+        for a in store.list_all()
+    ]
+
+
+@router.delete("/voip/agents/{agent_id}")
+async def delete_agent_config(
+    agent_id: int,
+    _api_key: str | None = Depends(verify_api_key),
+) -> dict:
+    """Delete a voice agent configuration."""
+    store = get_voice_agent_store()
+    deleted = store.delete(agent_id)
+    return {"status": "deleted" if deleted else "not_found"}
 
 
 # ─── Provider-Agnostic Endpoint ──────────────────────────────
@@ -70,29 +109,34 @@ class VOIPQueryResponse(BaseModel):
 @router.post("/voip/query", response_model=VOIPQueryResponse)
 async def voip_query(
     request: VOIPQueryRequest,
+    agent_id: int | None = Query(None),
     _api_key: str | None = Depends(verify_api_key),
     orchestrator=Depends(get_orchestrator),
 ) -> VOIPQueryResponse:
     """Universal VOIP webhook: accepts transcribed speech, returns KB answer.
 
-    This is the primary endpoint for VOIP integrations. It accepts
-    a natural language query (from speech-to-text) and returns a
-    structured response suitable for text-to-speech playback.
+    Reads voice agent config from the store (pushed from Odoo UI).
+    Pass ?agent_id=N as query param or in the request body.
     """
     start = time.monotonic()
     call_id = request.call_id or str(uuid.uuid4())
 
+    # Load agent config
+    effective_agent_id = request.agent_id or agent_id
+    store = get_voice_agent_store()
+    config = store.get(effective_agent_id)
+
     # Search KB using the orchestrator
     search_request = SearchRequest(
         query=request.query,
-        limit=request.max_results,
+        limit=request.max_results or config.max_results,
         source=f"voip_{request.provider}",
-        conversation_id=call_id,  # Use call_id as conversation for context
+        conversation_id=call_id,
     )
     search_response = await orchestrator.search(search_request)
 
-    # Build TTS-friendly answer from top results
-    answer, confidence = _build_answer(search_response.results)
+    # Build TTS-friendly answer using agent config
+    answer, confidence = _build_answer(search_response.results, config)
     sources = [
         VOIPSource(
             title=r.title,
@@ -103,8 +147,10 @@ async def voip_query(
         for r in search_response.results[:3]
     ]
 
-    # Generate follow-up suggestion based on intent
-    follow_up = _suggest_follow_up(search_response.parsed_intent)
+    # Generate follow-up suggestion
+    follow_up = None
+    if config.follow_up_enabled:
+        follow_up = _suggest_follow_up(search_response.parsed_intent)
 
     elapsed_ms = (time.monotonic() - start) * 1000
 
@@ -120,6 +166,7 @@ async def voip_query(
                     "source": f"voip_{request.provider}",
                     "call_id": call_id,
                     "caller_number": request.caller_number,
+                    "agent_id": effective_agent_id,
                 },
                 results_count=len(search_response.results),
                 source=f"voip_{request.provider}",
@@ -137,6 +184,7 @@ async def voip_query(
         intent=search_response.parsed_intent,
         follow_up=follow_up,
         response_time_ms=round(elapsed_ms, 2),
+        agent_name=config.name if effective_agent_id else None,
     )
 
 
@@ -145,56 +193,51 @@ async def voip_query(
 @router.post("/voip/twilio")
 async def twilio_webhook(
     request: Request,
+    agent_id: int | None = Query(None),
     orchestrator=Depends(get_orchestrator),
 ) -> dict:
     """Twilio-specific webhook that accepts Twilio's POST format.
 
-    Twilio sends form-encoded data with SpeechResult (from <Gather>),
-    CallSid, From, etc. Returns TwiML-compatible JSON for the response.
-
     Configure in Twilio as:
-      <Gather input="speech" action="/v1/voip/twilio" method="POST">
+      <Gather input="speech" action="/v1/voip/twilio?agent_id=1" method="POST">
         <Say>How can I help you?</Say>
       </Gather>
     """
     form = await request.form()
+    store = get_voice_agent_store()
+    config = store.get(agent_id)
 
     speech_result = form.get("SpeechResult", "")
     call_sid = form.get("CallSid", "")
-    caller = form.get("From", "")
     digits = form.get("Digits", "")
 
-    # Use speech or DTMF input
     query = str(speech_result or digits)
     if not query.strip():
         return _twilio_response(
             "I didn't catch that. Could you please repeat your question?",
             gather=True,
+            config=config,
         )
 
-    # Search KB
     search_request = SearchRequest(
         query=query,
-        limit=3,
+        limit=config.max_results,
         source="voip_twilio",
         conversation_id=str(call_sid),
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results)
+    answer, confidence = _build_answer(search_response.results, config)
 
-    if confidence < 0.3:
-        return _twilio_response(
-            "I'm not sure I found a good answer for that. "
-            "Let me transfer you to an agent who can help.",
-            gather=False,
-        )
+    if confidence < config.confidence_threshold:
+        escalation_msg = config.escalation_message or config.low_confidence_message
+        return _twilio_response(escalation_msg, gather=False, config=config)
 
-    follow_up = _suggest_follow_up(search_response.parsed_intent)
+    follow_up = _suggest_follow_up(search_response.parsed_intent) if config.follow_up_enabled else None
     full_response = answer
     if follow_up:
         full_response += f" {follow_up}"
 
-    return _twilio_response(full_response, gather=True)
+    return _twilio_response(full_response, gather=True, config=config)
 
 
 # ─── Vonage (Nexmo) Webhook ──────────────────────────────────
@@ -202,14 +245,13 @@ async def twilio_webhook(
 @router.post("/voip/vonage")
 async def vonage_webhook(
     request: Request,
+    agent_id: int | None = Query(None),
     orchestrator=Depends(get_orchestrator),
 ) -> list[dict]:
-    """Vonage Voice API webhook. Returns NCCO (Nexmo Call Control Objects).
-
-    Vonage sends JSON with speech recognition results.
-    Returns NCCO actions for the voice call flow.
-    """
+    """Vonage Voice API webhook. Returns NCCO actions."""
     body = await request.json()
+    store = get_voice_agent_store()
+    config = store.get(agent_id)
 
     speech_results = body.get("speech", {}).get("results", [])
     query = speech_results[0].get("text", "") if speech_results else ""
@@ -217,54 +259,28 @@ async def vonage_webhook(
 
     if not query.strip():
         return [
-            {
-                "action": "talk",
-                "text": "I didn't catch that. Could you please repeat?",
-                "bargeIn": True,
-            },
-            {
-                "action": "input",
-                "type": ["speech"],
-                "speech": {"language": "en-US"},
-                "eventUrl": [body.get("eventUrl", "")],
-            },
+            {"action": "talk", "text": "I didn't catch that. Could you please repeat?", "bargeIn": True},
+            {"action": "input", "type": ["speech"], "speech": {"language": config.tts_language}},
         ]
 
-    # Search KB
     search_request = SearchRequest(
         query=query,
-        limit=3,
+        limit=config.max_results,
         source="voip_vonage",
         conversation_id=call_uuid,
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results)
+    answer, confidence = _build_answer(search_response.results, config)
 
-    ncco: list[dict] = [
-        {"action": "talk", "text": answer, "bargeIn": True},
-    ]
+    ncco: list[dict] = [{"action": "talk", "text": answer, "bargeIn": True}]
 
-    # Continue listening for more questions
-    if confidence >= 0.3:
-        ncco.append({
-            "action": "talk",
-            "text": "Is there anything else I can help with?",
-            "bargeIn": True,
-        })
-        ncco.append({
-            "action": "input",
-            "type": ["speech"],
-            "speech": {"language": "en-US"},
-        })
+    if confidence >= config.confidence_threshold:
+        ncco.append({"action": "talk", "text": "Is there anything else I can help with?", "bargeIn": True})
+        ncco.append({"action": "input", "type": ["speech"], "speech": {"language": config.tts_language}})
     else:
-        ncco.append({
-            "action": "talk",
-            "text": "Let me connect you with a live agent.",
-        })
-        ncco.append({
-            "action": "connect",
-            "endpoint": [{"type": "phone", "number": body.get("fallback_number", "")}],
-        })
+        ncco.append({"action": "talk", "text": config.escalation_message})
+        if config.escalation_number:
+            ncco.append({"action": "connect", "endpoint": [{"type": "phone", "number": config.escalation_number}]})
 
     return ncco
 
@@ -274,32 +290,29 @@ async def vonage_webhook(
 @router.post("/voip/sip")
 async def sip_webhook(
     request: Request,
+    agent_id: int | None = Query(None),
     _api_key: str | None = Depends(verify_api_key),
     orchestrator=Depends(get_orchestrator),
 ) -> dict:
-    """Generic SIP/Asterisk webhook for AGI or ARI integrations.
-
-    Asterisk can call this via curl in an AGI script or via ARI
-    external media. Returns a simple JSON response with the answer
-    text for the PBX to play via TTS (Festival, Google TTS, etc.).
-    """
+    """Generic SIP/Asterisk webhook for AGI or ARI integrations."""
     body = await request.json()
+    store = get_voice_agent_store()
+    config = store.get(agent_id)
 
     query = body.get("query", body.get("text", ""))
     channel = body.get("channel", "")
-    caller_id = body.get("callerid", body.get("caller_id", ""))
 
     if not query:
         return {"status": "error", "message": "No query provided"}
 
     search_request = SearchRequest(
         query=query,
-        limit=3,
+        limit=config.max_results,
         source="voip_sip",
         conversation_id=channel or None,
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results)
+    answer, confidence = _build_answer(search_response.results, config)
 
     return {
         "status": "ok",
@@ -308,41 +321,35 @@ async def sip_webhook(
         "intent": search_response.parsed_intent,
         "results_count": len(search_response.results),
         "channel": channel,
+        "escalate": confidence < config.confidence_threshold,
     }
 
 
 # ─── Helpers ──────────────────────────────────────────────────
 
-def _build_answer(results: list) -> tuple[str, float]:
-    """Build a TTS-friendly answer from search results.
+def _build_answer(
+    results: list, config: VoiceAgentConfig | None = None
+) -> tuple[str, float]:
+    """Build a TTS-friendly answer from search results."""
+    if config is None:
+        from app.core.voice_agent_config import DEFAULT_CONFIG
+        config = DEFAULT_CONFIG
 
-    Returns (answer_text, confidence_score).
-    """
     if not results:
-        return (
-            "I couldn't find information about that in our knowledge base. "
-            "Would you like me to connect you with a support agent?",
-            0.0,
-        )
+        return config.no_answer_message, 0.0
 
     top = results[0]
     confidence = top.relevance_score
 
-    if confidence < 0.3:
-        return (
-            "I'm not confident I have the right answer. "
-            "Let me transfer you to someone who can help.",
-            confidence,
-        )
+    if confidence < config.confidence_threshold:
+        return config.low_confidence_message, confidence
 
-    # Use the top result's content, truncated for TTS
     content = top.content or top.snippet
-    # Truncate to ~500 chars for reasonable TTS length
-    if len(content) > 500:
-        # Break at sentence boundary
-        truncated = content[:500]
+    max_len = config.max_answer_length
+    if len(content) > max_len:
+        truncated = content[:max_len]
         last_period = truncated.rfind(".")
-        if last_period > 200:
+        if last_period > max_len // 2:
             content = truncated[: last_period + 1]
         else:
             content = truncated + "..."
@@ -362,21 +369,25 @@ def _suggest_follow_up(intent: str | None) -> str | None:
     return suggestions.get(intent)
 
 
-def _twilio_response(text: str, gather: bool = True) -> dict:
-    """Build a Twilio-compatible response structure.
+def _twilio_response(
+    text: str, gather: bool = True, config: VoiceAgentConfig | None = None
+) -> dict:
+    """Build a Twilio-compatible response structure."""
+    if config is None:
+        from app.core.voice_agent_config import DEFAULT_CONFIG
+        config = DEFAULT_CONFIG
 
-    Returns a dict that the caller should convert to TwiML.
-    For production, use the twilio Python SDK to generate proper TwiML.
-    """
     response: dict[str, Any] = {
         "say": text,
         "gather": gather,
+        "voice": config.tts_voice,
+        "language": config.tts_language,
     }
     if gather:
         response["gather_config"] = {
             "input": "speech",
             "timeout": 5,
             "speechTimeout": "auto",
-            "language": "en-US",
+            "language": config.tts_language,
         }
     return response

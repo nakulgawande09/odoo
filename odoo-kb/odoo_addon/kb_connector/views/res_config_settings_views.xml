@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="res_config_settings_view_form_kb" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.kb</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="Knowledge Base" string="Knowledge Base">
+                    <!-- KB Service Connection -->
+                    <block title="KB Service Connection">
+                        <setting string="Service URL"
+                                 help="URL of the Knowledge Base microservice">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_service_url" class="col-lg-3"/>
+                                    <field name="kb_service_url" class="col-lg-9"/>
+                                </div>
+                            </div>
+                        </setting>
+                        <setting string="API Key"
+                                 help="Authentication key for the KB service">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_service_api_key" class="col-lg-3"/>
+                                    <field name="kb_service_api_key" class="col-lg-9"
+                                           password="True"/>
+                                </div>
+                            </div>
+                        </setting>
+                    </block>
+
+                    <!-- VOIP Integration -->
+                    <block title="VOIP Integration"
+                           help="Configure voice agent settings for phone-based KB access">
+                        <setting string="Enable VOIP"
+                                 help="Enable voice agent functionality for VOIP providers">
+                            <field name="kb_voip_enabled"/>
+                        </setting>
+                        <setting string="Default VOIP Provider"
+                                 invisible="not kb_voip_enabled"
+                                 help="Default provider for new voice agents">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_voip_provider" class="col-lg-3"/>
+                                    <field name="kb_voip_provider" class="col-lg-9"/>
+                                </div>
+                            </div>
+                        </setting>
+                        <setting string="Twilio Credentials"
+                                 invisible="kb_voip_provider != 'twilio' or not kb_voip_enabled"
+                                 help="Twilio Account SID and Auth Token">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_twilio_account_sid" class="col-lg-3"/>
+                                    <field name="kb_twilio_account_sid" class="col-lg-9"/>
+                                </div>
+                                <div class="row mt16">
+                                    <label for="kb_twilio_auth_token" class="col-lg-3"/>
+                                    <field name="kb_twilio_auth_token" class="col-lg-9"
+                                           password="True"/>
+                                </div>
+                            </div>
+                        </setting>
+                        <setting string="Vonage Credentials"
+                                 invisible="kb_voip_provider != 'vonage' or not kb_voip_enabled"
+                                 help="Vonage API Key and Secret">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_vonage_api_key" class="col-lg-3"/>
+                                    <field name="kb_vonage_api_key" class="col-lg-9"/>
+                                </div>
+                                <div class="row mt16">
+                                    <label for="kb_vonage_api_secret" class="col-lg-3"/>
+                                    <field name="kb_vonage_api_secret" class="col-lg-9"
+                                           password="True"/>
+                                </div>
+                            </div>
+                        </setting>
+                        <div class="mt16" invisible="not kb_voip_enabled">
+                            <button name="%(kb_voice_agent_action)d"
+                                    type="action"
+                                    string="Configure Voice Agents"
+                                    class="btn-link"
+                                    icon="fa-microphone"/>
+                        </div>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

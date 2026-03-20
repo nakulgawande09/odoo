@@ -17,6 +17,7 @@ from app.core.query_logger import QueryLogger
 from app.core.query_preprocessor import create_preprocessor
 from app.core.reranker import create_reranker
 from app.core.search_service import SearchOrchestrator
+from app.core.voice_agent_config import VoiceAgentStore
 from app.dependencies import get_settings, set_services
 from app.ingestion.chunker import RecursiveChunker
 from app.ingestion.embedder import create_embedder
@@ -96,6 +97,9 @@ async def lifespan(app: FastAPI):
             from app.enrichment.tavily_web import TavilyEnrichmentProvider
             enrichment_providers.append(TavilyEnrichmentProvider(settings))
 
+    # Voice agent config store
+    voice_agent_store = VoiceAgentStore()
+
     # Cache stats aggregator
     def cache_stats():
         return {
@@ -137,6 +141,7 @@ async def lifespan(app: FastAPI):
         pipeline=pipeline,
         query_logger=query_logger,
         cache_stats_fn=cache_stats,
+        voice_agent_store=voice_agent_store,
     )
 
     logger.info(
