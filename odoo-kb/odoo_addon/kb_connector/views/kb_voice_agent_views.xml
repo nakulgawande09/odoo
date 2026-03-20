@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Voice Agent Form View -->
+    <record id="kb_voice_agent_view_form" model="ir.ui.view">
+        <field name="name">kb.voice.agent.form</field>
+        <field name="model">kb.voice.agent</field>
+        <field name="arch" type="xml">
+            <form string="Voice Agent">
+                <header>
+                    <button name="action_test_connection"
+                            type="object"
+                            string="Test Connection"
+                            class="btn-secondary"
+                            icon="fa-plug"/>
+                    <button name="action_test_voice_query"
+                            type="object"
+                            string="Test Query"
+                            class="btn-secondary"
+                            icon="fa-microphone"/>
+                    <button name="action_sync_config"
+                            type="object"
+                            string="Sync to KB Service"
+                            class="btn-primary"
+                            icon="fa-cloud-upload"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button" icon="fa-phone"
+                                name="action_view_stats" type="object"
+                                invisible="total_calls == 0">
+                            <field name="total_calls" string="Calls" widget="statinfo"/>
+                        </button>
+                    </div>
+                    <widget name="web_ribbon" title="Archived"
+                            bg_color="text-bg-danger"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Voice Agent Name"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Provider">
+                            <field name="voip_provider"/>
+                            <field name="webhook_url_display" string="Webhook URL"
+                                   widget="CopyClipboardChar" readonly="1"/>
+                        </group>
+                        <group string="Status">
+                            <field name="active" invisible="1"/>
+                            <field name="sequence" invisible="1"/>
+                            <field name="last_call_at"/>
+                            <field name="avg_confidence" widget="percentage"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <!-- Tab 1: Messages -->
+                        <page string="Messages" name="messages">
+                            <group>
+                                <group string="Call Flow Messages">
+                                    <field name="greeting_message"/>
+                                    <field name="no_answer_message"/>
+                                    <field name="low_confidence_message"/>
+                                    <field name="goodbye_message"/>
+                                </group>
+                                <group string="Options">
+                                    <field name="follow_up_enabled"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <!-- Tab 2: Voice Settings -->
+                        <page string="Voice &amp; TTS" name="voice">
+                            <group>
+                                <group string="Text-to-Speech">
+                                    <field name="tts_voice"/>
+                                    <field name="tts_language"/>
+                                    <field name="tts_speed"/>
+                                </group>
+                                <group string="Search Settings">
+                                    <field name="max_results"/>
+                                    <field name="confidence_threshold"/>
+                                    <field name="max_answer_length"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <!-- Tab 3: Escalation -->
+                        <page string="Escalation" name="escalation">
+                            <group>
+                                <group string="When Agent Can't Answer">
+                                    <field name="escalation_mode"/>
+                                    <field name="escalation_number"
+                                           invisible="escalation_mode == 'none'"/>
+                                    <field name="escalation_message"
+                                           invisible="escalation_mode == 'none'"/>
+                                </group>
+                                <group string="Working Hours">
+                                    <field name="active_hours_enabled"/>
+                                    <field name="active_hours_start"
+                                           widget="float_time"
+                                           invisible="not active_hours_enabled"/>
+                                    <field name="active_hours_end"
+                                           widget="float_time"
+                                           invisible="not active_hours_enabled"/>
+                                    <field name="timezone"
+                                           invisible="not active_hours_enabled"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <!-- Tab 4: Provider Credentials -->
+                        <page string="Provider Credentials" name="credentials">
+                            <group>
+                                <group string="Twilio"
+                                       invisible="voip_provider != 'twilio'">
+                                    <field name="twilio_account_sid"
+                                           password="True"/>
+                                    <field name="twilio_auth_token"
+                                           password="True"/>
+                                </group>
+                                <group string="Vonage"
+                                       invisible="voip_provider != 'vonage'">
+                                    <field name="vonage_api_key"/>
+                                    <field name="vonage_api_secret"
+                                           password="True"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info" role="alert">
+                                <strong>Setup Instructions:</strong>
+                                <ol class="mb-0 mt-2">
+                                    <li>Copy the <strong>Webhook URL</strong> above</li>
+                                    <li>Paste it into your VOIP provider's dashboard as the voice webhook</li>
+                                    <li>For <strong>Twilio</strong>: Use as the Action URL in a &lt;Gather&gt; verb</li>
+                                    <li>For <strong>Vonage</strong>: Set as the Answer URL in your Vonage Application</li>
+                                    <li>For <strong>Asterisk</strong>: Call via AGI or ARI with the webhook URL</li>
+                                    <li>Click <strong>Test Query</strong> to verify the integration works</li>
+                                </ol>
+                            </div>
+                        </page>
+
+                        <!-- Tab 5: Notes -->
+                        <page string="Notes" name="notes">
+                            <field name="notes" placeholder="Internal notes about this voice agent..."/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Voice Agent Tree View -->
+    <record id="kb_voice_agent_view_tree" model="ir.ui.view">
+        <field name="name">kb.voice.agent.tree</field>
+        <field name="model">kb.voice.agent</field>
+        <field name="arch" type="xml">
+            <tree string="Voice Agents">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="voip_provider"/>
+                <field name="escalation_mode"/>
+                <field name="total_calls"/>
+                <field name="avg_confidence" widget="percentage"/>
+                <field name="last_call_at"/>
+                <field name="active" column_invisible="True"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Voice Agent Action -->
+    <record id="kb_voice_agent_action" model="ir.actions.act_window">
+        <field name="name">Voice Agents</field>
+        <field name="res_model">kb.voice.agent</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first Voice Agent
+            </p>
+            <p>
+                Voice agents handle incoming VOIP calls using the Knowledge Base.
+                Configure the greeting, escalation rules, and connect to your
+                VOIP provider (Twilio, Vonage, Asterisk).
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu Items -->
+    <menuitem id="kb_menu_root"
+              name="Knowledge Base"
+              web_icon="kb_connector,static/description/icon.png"
+              sequence="90"/>
+
+    <menuitem id="kb_menu_voip"
+              name="Voice Agents"
+              parent="kb_menu_root"
+              action="kb_voice_agent_action"
+              sequence="10"/>
+
+    <menuitem id="kb_menu_config"
+              name="Configuration"
+              parent="kb_menu_root"
+              sequence="90"/>
+
+</odoo>
