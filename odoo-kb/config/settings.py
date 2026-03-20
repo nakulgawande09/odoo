@@ -53,6 +53,20 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 64
 
+    # Reranker
+    reranker_provider: str = "none"  # "none" | "openai" | "local"
+    reranker_model: str = ""  # e.g. "gpt-4o-mini" or "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_top_k: int = 20  # max candidates to rerank
+
+    # Query expansion
+    query_expansion_provider: str = "static"  # "static" | "llm"
+
+    # Backend weights (JSON map, e.g. {"pgvector": 1.0, "qdrant": 0.9})
+    backend_weights: dict[str, float] = {}
+
+    # Conversation context
+    conversation_ttl_seconds: int = 1800  # 30 minutes
+
     # Enrichment
     enrichment_enabled: bool = False
     tavily_api_key: str = ""
@@ -61,6 +75,16 @@ class Settings(BaseSettings):
 
     # Filter taxonomy
     filter_taxonomy_path: str = "config/filters.yaml"
+
+    @field_validator("backend_weights", mode="before")
+    @classmethod
+    def parse_backend_weights(cls, v: Any) -> dict[str, float]:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+        return v
 
     @field_validator("api_keys", mode="before")
     @classmethod

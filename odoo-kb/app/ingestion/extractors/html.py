@@ -21,8 +21,9 @@ class HtmlExtractor:
                 tag.decompose()
             text = soup.get_text(separator="\n")
         except ImportError:
-            # Fallback: strip tags with regex
-            text = re.sub(r"<[^>]+>", " ", content)
+            # Fallback: strip tags with regex, removing script/style contents first
+            text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", content, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r"<[^>]+>", " ", text)
 
         # Collapse whitespace
         lines = (line.strip() for line in text.splitlines())

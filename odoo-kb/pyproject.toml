@@ -20,12 +20,14 @@ openai = ["openai>=1.0"]
 pdf = ["pdfplumber>=0.11.0"]
 html = ["beautifulsoup4>=4.12"]
 local-embeddings = ["sentence-transformers>=2.0"]
+qdrant = ["qdrant-client>=1.9.0"]
 enrichment = ["tavily-python>=0.3"]
 all = [
     "openai>=1.0",
     "pdfplumber>=0.11.0",
     "beautifulsoup4>=4.12",
     "sentence-transformers>=2.0",
+    "qdrant-client>=1.9.0",
     "tavily-python>=0.3",
 ]
 dev = [

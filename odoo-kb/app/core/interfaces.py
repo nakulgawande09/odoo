@@ -85,7 +85,7 @@ class Chunker(Protocol):
 
 @runtime_checkable
 class EnrichmentProvider(Protocol):
-    """Enriches search results with external data (Google, Tavily, etc.)."""
+    """Enriches search results with external data (entity linking, fact-checking, etc.)."""
 
     @property
     def name(self) -> str:
@@ -94,4 +94,25 @@ class EnrichmentProvider(Protocol):
     async def enrich(
         self, query: str, results: list[SearchResultItem]
     ) -> list[SearchResultItem]:
+        ...
+
+
+@runtime_checkable
+class Reranker(Protocol):
+    """Second-stage reranker for improving result relevance."""
+
+    async def rerank(
+        self,
+        query: str,
+        results: list[SearchResultItem],
+        top_k: int | None = None,
+    ) -> list[SearchResultItem]:
+        ...
+
+
+@runtime_checkable
+class QueryExpander(Protocol):
+    """Expands queries with synonyms and related terms."""
+
+    async def expand(self, query: str, max_additions: int = 3) -> str:
         ...
