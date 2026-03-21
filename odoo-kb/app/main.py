@@ -41,6 +41,13 @@ async def lifespan(app: FastAPI):
     # Configure auth
     configure_auth(settings.api_keys)
 
+    # ── Redis (optional) ──────────────────────────────────────
+    redis_client = None
+    use_redis = settings.cache_backend == "redis" and settings.redis_url
+    if use_redis:
+        from app.core.redis_client import init_redis
+        redis_client = await init_redis(settings.redis_url)
+
     # Create backend(s)
     backend = create_backend(settings)
     backends = [backend]
@@ -52,19 +59,29 @@ async def lifespan(app: FastAPI):
     if hasattr(backend, "initialize") and not isinstance(backend, PgVectorBackend):
         await backend.initialize()
 
-    # Create embedder with caching layer
-    raw_embedder = create_embedder(settings)
-    embedding_cache = EmbeddingCache(
-        max_size=getattr(settings, "embedding_cache_size", 5000),
-        ttl_seconds=getattr(settings, "embedding_cache_ttl", 3600),
-    )
-    embedder = CachedEmbedder(raw_embedder, embedding_cache)
+    # ── Caching (memory or Redis) ─────────────────────────────
+    if redis_client:
+        from app.core.redis_cache import RedisCachedEmbedder, RedisEmbeddingCache, RedisSearchCache
 
-    # Create search cache
-    search_cache = SearchCache(
-        max_size=getattr(settings, "search_cache_size", 500),
-        ttl_seconds=getattr(settings, "search_cache_ttl", 120),
-    )
+        raw_embedder = create_embedder(settings)
+        embedding_cache = RedisEmbeddingCache(
+            redis_client, ttl_seconds=settings.embedding_cache_ttl,
+        )
+        embedder = RedisCachedEmbedder(raw_embedder, embedding_cache)
+        search_cache = RedisSearchCache(
+            redis_client, ttl_seconds=settings.search_cache_ttl,
+        )
+    else:
+        raw_embedder = create_embedder(settings)
+        embedding_cache = EmbeddingCache(
+            max_size=settings.embedding_cache_size,
+            ttl_seconds=settings.embedding_cache_ttl,
+        )
+        embedder = CachedEmbedder(raw_embedder, embedding_cache)
+        search_cache = SearchCache(
+            max_size=settings.search_cache_size,
+            ttl_seconds=settings.search_cache_ttl,
+        )
 
     # Create preprocessor
     taxonomy = load_filter_taxonomy(settings.filter_taxonomy_path)
@@ -73,10 +90,16 @@ async def lifespan(app: FastAPI):
     # Create reranker (optional)
     reranker = create_reranker(settings)
 
-    # Create conversation tracker
-    conversation_tracker = ConversationTracker(
-        ttl_seconds=settings.conversation_ttl_seconds
-    )
+    # ── Conversation tracker (memory or Redis) ────────────────
+    if redis_client:
+        from app.core.conversation import RedisConversationTracker
+        conversation_tracker = RedisConversationTracker(
+            redis_client, ttl_seconds=settings.conversation_ttl_seconds,
+        )
+    else:
+        conversation_tracker = ConversationTracker(
+            ttl_seconds=settings.conversation_ttl_seconds,
+        )
 
     # Create query expander
     query_expander = create_query_expander(settings)
@@ -97,8 +120,12 @@ async def lifespan(app: FastAPI):
             from app.enrichment.tavily_web import TavilyEnrichmentProvider
             enrichment_providers.append(TavilyEnrichmentProvider(settings))
 
-    # Voice agent config store
-    voice_agent_store = VoiceAgentStore()
+    # ── Voice agent config store (memory or Redis) ────────────
+    if redis_client:
+        from app.core.voice_agent_config import RedisVoiceAgentStore
+        voice_agent_store = RedisVoiceAgentStore(redis_client)
+    else:
+        voice_agent_store = VoiceAgentStore()
 
     # RAG answer synthesizer (optional)
     answer_synthesizer = None
@@ -156,13 +183,15 @@ async def lifespan(app: FastAPI):
         answer_synthesizer=answer_synthesizer,
     )
 
+    cache_label = "redis" if redis_client else "memory"
     logger.info(
         "KB service started (backend=%s, embedder=%s, reranker=%s, "
-        "expander=%s, cache=enabled, logging=enabled)",
+        "expander=%s, cache=%s, logging=enabled)",
         settings.search_backend,
         settings.embedding_provider,
         settings.reranker_provider,
         settings.query_expansion_provider,
+        cache_label,
     )
 
     yield
@@ -170,6 +199,9 @@ async def lifespan(app: FastAPI):
     # Shutdown
     if hasattr(backend, "close"):
         await backend.close()
+    if redis_client:
+        from app.core.redis_client import close_redis
+        await close_redis()
     logger.info("KB service stopped")
 
 
@@ -182,7 +214,7 @@ def create_app() -> FastAPI:
             "semantic reranking, conversation context, query expansion, "
             "caching, analytics, and multi-tenant isolation."
         ),
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
     app.include_router(v1_router)

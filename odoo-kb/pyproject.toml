@@ -23,9 +23,11 @@ local-embeddings = ["sentence-transformers>=2.0"]
 qdrant = ["qdrant-client>=1.9.0"]
 enrichment = ["tavily-python>=0.3"]
 anthropic = ["anthropic>=0.30"]
+redis = ["redis>=5.0"]
 all = [
     "openai>=1.0",
     "anthropic>=0.30",
+    "redis>=5.0",
     "pdfplumber>=0.11.0",
     "beautifulsoup4>=4.12",
     "sentence-transformers>=2.0",
@@ -36,6 +38,8 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "httpx>=0.27.0",
+    "alembic>=1.13",
+    "fakeredis[json]>=2.20",
 ]
 
 [build-system]

@@ -3,13 +3,19 @@
 Stores recent queries per conversation_id so the search system can
 use prior context to improve results — e.g., resolving pronouns
 ("it", "that product") or boosting topics from earlier turns.
+
+Two implementations:
+  - ConversationTracker: in-memory (dev / single instance)
+  - RedisConversationTracker: Redis-backed (production / multi-instance)
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -168,3 +174,108 @@ class ConversationTracker:
         ]
         for cid in expired:
             del self._conversations[cid]
+
+
+class RedisConversationTracker:
+    """Redis-backed conversation context store.
+
+    Each conversation is stored as a JSON blob at key ``kb:conv:{id}``
+    with a Redis TTL for automatic expiry. Suitable for multi-instance
+    deployments.
+    """
+
+    _KEY_PREFIX = "kb:conv:"
+
+    def __init__(self, redis: Any, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> None:
+        self._r = redis
+        self._ttl = ttl_seconds
+
+    async def _load(self, conversation_id: str) -> ConversationContext | None:
+        raw = await self._r.get(f"{self._KEY_PREFIX}{conversation_id}")
+        if raw is None:
+            return None
+        data = json.loads(raw)
+        turns = [ConversationTurn(**t) for t in data.get("turns", [])]
+        return ConversationContext(
+            conversation_id=data["conversation_id"],
+            turns=turns,
+            last_active=data.get("last_active", time.monotonic()),
+        )
+
+    async def _save(self, ctx: ConversationContext) -> None:
+        data = {
+            "conversation_id": ctx.conversation_id,
+            "turns": [asdict(t) for t in ctx.turns],
+            "last_active": ctx.last_active,
+        }
+        await self._r.set(
+            f"{self._KEY_PREFIX}{ctx.conversation_id}",
+            json.dumps(data),
+            ex=self._ttl,
+        )
+
+    async def get_context(self, conversation_id: str) -> ConversationContext | None:
+        return await self._load(conversation_id)
+
+    async def record_turn(
+        self,
+        conversation_id: str,
+        query: str,
+        intent: str | None = None,
+        filters: dict | None = None,
+    ) -> ConversationContext:
+        ctx = await self._load(conversation_id)
+        if ctx is None:
+            ctx = ConversationContext(conversation_id=conversation_id)
+        ctx.add_turn(query, intent, filters)
+        await self._save(ctx)
+        return ctx
+
+    def expand_query_with_context(
+        self, query: str, conversation_id: str | None
+    ) -> str:
+        """Synchronous — cannot use Redis. Returns query unchanged.
+
+        For Redis-backed tracker, query expansion should be done after
+        an async ``get_context()`` call by the orchestrator. This method
+        exists only for interface compatibility.
+        """
+        return query
+
+    async def expand_query_with_context_async(
+        self, query: str, conversation_id: str | None
+    ) -> str:
+        """Async query expansion using Redis-stored conversation context."""
+        if not conversation_id:
+            return query
+        ctx = await self.get_context(conversation_id)
+        if ctx is None or not ctx.turns:
+            return query
+
+        needs_context = (
+            len(query.split()) <= 3
+            or any(
+                p in query.lower().split()
+                for p in ("it", "that", "this", "those", "them", "its")
+            )
+        )
+        if not needs_context:
+            return query
+
+        recent = ctx.recent_queries
+        if len(recent) >= 2:
+            prior = recent[-2] if recent[-1] == query else recent[-1]
+            return f"{prior} {query}"
+        return query
+
+    def get_context_filters(self, conversation_id: str | None) -> dict:
+        """Synchronous stub — returns empty. Use async version."""
+        return {}
+
+    async def get_context_filters_async(self, conversation_id: str | None) -> dict:
+        if not conversation_id:
+            return {}
+        ctx = await self.get_context(conversation_id)
+        if ctx is None:
+            return {}
+        return ctx.accumulated_filters

@@ -3,11 +3,16 @@
 Holds agent configurations pushed from Odoo. The VOIP endpoints
 read from this store at runtime to customize behavior per agent
 (greeting, escalation, confidence threshold, etc.).
+
+Two implementations:
+  - VoiceAgentStore: in-memory (dev / single instance)
+  - RedisVoiceAgentStore: Redis-backed (production / multi-instance)
 """
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -104,3 +109,54 @@ class VoiceAgentStore:
     def list_all(self) -> list[VoiceAgentConfig]:
         """Return all configured agents."""
         return list(self._agents.values())
+
+
+class RedisVoiceAgentStore:
+    """Redis-backed voice agent config store.
+
+    Survives restarts and is shared across multiple service instances.
+    Each agent config is stored as a Redis hash at key ``kb:agent:{id}``.
+    """
+
+    _KEY_PREFIX = "kb:agent:"
+
+    def __init__(self, redis: Any) -> None:
+        self._r = redis
+
+    async def get(self, agent_id: int | None) -> VoiceAgentConfig:
+        if agent_id is None:
+            return DEFAULT_CONFIG
+        raw = await self._r.get(f"{self._KEY_PREFIX}{agent_id}")
+        if raw is None:
+            return DEFAULT_CONFIG
+        data = json.loads(raw)
+        return VoiceAgentConfig(**data)
+
+    async def put(self, agent_id: int, config: dict[str, Any]) -> VoiceAgentConfig:
+        agent = VoiceAgentConfig(agent_id=agent_id, **{
+            k: v for k, v in config.items()
+            if k in VoiceAgentConfig.__dataclass_fields__ and k != "agent_id"
+        })
+        await self._r.set(
+            f"{self._KEY_PREFIX}{agent_id}",
+            json.dumps(asdict(agent)),
+        )
+        logger.info("Updated voice agent config (Redis): %s (id=%d)", agent.name, agent_id)
+        return agent
+
+    async def delete(self, agent_id: int) -> bool:
+        deleted = await self._r.delete(f"{self._KEY_PREFIX}{agent_id}")
+        return deleted > 0
+
+    async def list_all(self) -> list[VoiceAgentConfig]:
+        agents: list[VoiceAgentConfig] = []
+        cursor = 0
+        while True:
+            cursor, keys = await self._r.scan(cursor, match=f"{self._KEY_PREFIX}*", count=100)
+            for key in keys:
+                raw = await self._r.get(key)
+                if raw:
+                    agents.append(VoiceAgentConfig(**json.loads(raw)))
+            if cursor == 0:
+                break
+        return agents

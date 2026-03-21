@@ -22,10 +22,19 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
+import inspect
+
 from app.api.auth import verify_api_key
 from app.core.voice_agent_config import VoiceAgentConfig, VoiceAgentStore
 from app.dependencies import get_answer_synthesizer, get_orchestrator, get_query_logger, get_voice_agent_store
 from app.schemas.search import SearchRequest, SearchResultItem
+
+
+async def _await_if_needed(result):
+    """Await a result if it's a coroutine (supports both sync and async stores)."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +86,7 @@ async def upsert_agent_config(
 ) -> dict:
     """Create or update a voice agent configuration (pushed from Odoo UI)."""
     store = get_voice_agent_store()
-    agent = store.put(agent_id, config)
+    agent = await _await_if_needed(store.put(agent_id, config))
     return {"status": "ok", "agent_id": agent.agent_id, "name": agent.name}
 
 
@@ -87,9 +96,10 @@ async def list_agent_configs(
 ) -> list[dict]:
     """List all voice agent configurations."""
     store = get_voice_agent_store()
+    agents = await _await_if_needed(store.list_all())
     return [
         {"agent_id": a.agent_id, "name": a.name, "provider": a.provider}
-        for a in store.list_all()
+        for a in agents
     ]
 
 
@@ -100,7 +110,7 @@ async def delete_agent_config(
 ) -> dict:
     """Delete a voice agent configuration."""
     store = get_voice_agent_store()
-    deleted = store.delete(agent_id)
+    deleted = await _await_if_needed(store.delete(agent_id))
     return {"status": "deleted" if deleted else "not_found"}
 
 
@@ -124,7 +134,7 @@ async def voip_query(
     # Load agent config
     effective_agent_id = request.agent_id or agent_id
     store = get_voice_agent_store()
-    config = store.get(effective_agent_id)
+    config = await _await_if_needed(store.get(effective_agent_id))
 
     # Search KB using the orchestrator
     search_request = SearchRequest(
@@ -205,7 +215,7 @@ async def twilio_webhook(
     """
     form = await request.form()
     store = get_voice_agent_store()
-    config = store.get(agent_id)
+    config = await _await_if_needed(store.get(agent_id))
 
     speech_result = form.get("SpeechResult", "")
     call_sid = form.get("CallSid", "")
@@ -251,7 +261,7 @@ async def vonage_webhook(
     """Vonage Voice API webhook. Returns NCCO actions."""
     body = await request.json()
     store = get_voice_agent_store()
-    config = store.get(agent_id)
+    config = await _await_if_needed(store.get(agent_id))
 
     speech_results = body.get("speech", {}).get("results", [])
     query = speech_results[0].get("text", "") if speech_results else ""
@@ -297,7 +307,7 @@ async def sip_webhook(
     """Generic SIP/Asterisk webhook for AGI or ARI integrations."""
     body = await request.json()
     store = get_voice_agent_store()
-    config = store.get(agent_id)
+    config = await _await_if_needed(store.get(agent_id))
 
     query = body.get("query", body.get("text", ""))
     channel = body.get("channel", "")

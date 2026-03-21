@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint build up down logs demo clean
+.PHONY: help install dev test lint build up down logs demo clean migrate migrate-create migrate-stamp
 
 SHELL := /bin/bash
 
@@ -20,6 +20,17 @@ test: ## Run test suite
 
 lint: ## Run linter
 	ruff check app/ tests/
+
+# ─── Database Migrations ─────────────────────────────────────
+
+migrate: ## Run database migrations to latest
+	alembic upgrade head
+
+migrate-create: ## Create a new migration (usage: make migrate-create msg='add foo')
+	alembic revision --autogenerate -m "$(msg)"
+
+migrate-stamp: ## Stamp existing DB as current (usage: make migrate-stamp rev=001)
+	alembic stamp $(rev)
 
 # ─── Docker ───────────────────────────────────────────────────
 

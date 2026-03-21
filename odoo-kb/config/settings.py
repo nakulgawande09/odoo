@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_timeout: float = 2.0
 
+    # Redis (for shared state across instances)
+    redis_url: str = ""  # e.g. "redis://localhost:6379/0"
+    cache_backend: str = "memory"  # "memory" | "redis"
+
     # Chunking
     chunk_size: int = 512
     chunk_overlap: int = 64

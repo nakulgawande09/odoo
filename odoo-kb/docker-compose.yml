@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
+  kb-redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   kb-service:
     build: .
     ports:
@@ -24,9 +34,13 @@ services:
       KB_SEARCH_BACKEND: "pgvector"
       KB_EMBEDDING_PROVIDER: "openai"
       KB_OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      KB_REDIS_URL: "redis://kb-redis:6379/0"
+      KB_CACHE_BACKEND: "redis"
       KB_LOG_LEVEL: "info"
     depends_on:
       kb-db:
+        condition: service_healthy
+      kb-redis:
         condition: service_healthy
 
 volumes:
