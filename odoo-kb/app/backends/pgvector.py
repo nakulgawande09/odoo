@@ -146,6 +146,16 @@ class PgVectorBackend:
                     )
                 )
 
+    async def delete_document_chunks(self, document_id: str) -> None:
+        """Delete all chunks for a document without deleting the document itself."""
+        async with self._session_factory() as session:
+            async with session.begin():
+                await session.execute(
+                    delete(ChunkRecord).where(
+                        ChunkRecord.document_id == document_id
+                    )
+                )
+
     async def create_document(
         self,
         doc_id: str,

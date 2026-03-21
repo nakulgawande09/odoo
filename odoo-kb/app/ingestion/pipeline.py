@@ -123,6 +123,64 @@ class IngestionPipeline:
             await self.backend.update_document_status(doc_id, "failed")
             raise IngestionError(f"Ingestion failed for {doc_id}: {e}") from e
 
+    async def update(self, document_id: str, request: IngestRequest) -> DocumentResponse:
+        """Re-ingest a document: delete old chunks and re-index with same ID."""
+        title = request.title or "Untitled"
+
+        # Delete existing chunks
+        await self.backend.delete_document_chunks(document_id)
+
+        # Update document metadata
+        await self.backend.update_document_status(document_id, "processing")
+
+        try:
+            raw_content = request.content or ""
+            if request.url:
+                raw_content = await self._fetch_url(request.url)
+
+            extractors = _get_extractors()
+            extractor = extractors.get(request.content_type, TextExtractor())
+            text = await extractor.extract(raw_content, request.content_type)
+
+            if not text.strip():
+                await self.backend.update_document_status(
+                    document_id, "indexed", chunks_count=0,
+                )
+                return self._make_response(document_id, title, request, "indexed", 0)
+
+            chunks_text = self.chunker.chunk(text, request.metadata)
+            embeddings = await self.embedder.embed_batch(chunks_text)
+
+            chunks = [
+                ChunkData(
+                    chunk_id=f"{document_id}_chunk_{i}",
+                    document_id=document_id,
+                    content=chunk_text,
+                    chunk_index=i,
+                    embedding=embedding,
+                    metadata={
+                        **request.metadata,
+                        "title": title,
+                        "chunk_total": len(chunks_text),
+                    },
+                )
+                for i, (chunk_text, embedding) in enumerate(
+                    zip(chunks_text, embeddings)
+                )
+            ]
+
+            await self.backend.index_chunks(chunks)
+            await self.backend.update_document_status(
+                document_id, "indexed", chunks_count=len(chunks),
+            )
+
+            logger.info("Updated document %s: %d chunks re-indexed", document_id, len(chunks))
+            return self._make_response(document_id, title, request, "indexed", len(chunks))
+
+        except Exception as e:
+            await self.backend.update_document_status(document_id, "failed")
+            raise IngestionError(f"Update failed for {document_id}: {e}") from e
+
     async def _fetch_url(self, url: str) -> str:
         """Fetch content from a URL."""
         try:

@@ -4,9 +4,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.auth import verify_api_key
-from app.core.exceptions import DocumentNotFoundError
-from app.dependencies import get_backend
-from app.schemas.document import DocumentResponse, DocumentStatus
+from app.core.exceptions import DocumentNotFoundError, IngestionError
+from app.dependencies import get_backend, get_pipeline
+from app.schemas.document import DocumentResponse, DocumentStatus, IngestRequest
 
 router = APIRouter()
 
@@ -33,6 +33,24 @@ async def get_document(
         created_at=doc.created_at,
         updated_at=doc.updated_at,
     )
+
+
+@router.put("/documents/{document_id}", response_model=DocumentResponse)
+async def update_document(
+    document_id: str,
+    request: IngestRequest,
+    _api_key: str | None = Depends(verify_api_key),
+    backend=Depends(get_backend),
+    pipeline=Depends(get_pipeline),
+) -> DocumentResponse:
+    """Update a document: delete old chunks and re-ingest with the same ID."""
+    doc = await backend.get_document(document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        return await pipeline.update(document_id, request)
+    except IngestionError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.delete("/documents/{document_id}")

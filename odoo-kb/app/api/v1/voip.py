@@ -26,7 +26,7 @@ import inspect
 
 from app.api.auth import verify_api_key
 from app.core.voice_agent_config import VoiceAgentConfig, VoiceAgentStore
-from app.dependencies import get_answer_synthesizer, get_orchestrator, get_query_logger, get_voice_agent_store
+from app.dependencies import get_answer_synthesizer, get_orchestrator, get_query_logger, get_settings, get_voice_agent_store
 from app.schemas.search import SearchRequest, SearchResultItem
 
 
@@ -35,6 +35,28 @@ async def _await_if_needed(result):
     if inspect.isawaitable(result):
         return await result
     return result
+
+
+async def _verify_twilio_signature(request: Request) -> None:
+    """Verify Twilio request signature if enabled."""
+    settings = get_settings()
+    if not settings.voip_verify_signatures or not settings.twilio_auth_token:
+        return
+    try:
+        from twilio.request_validator import RequestValidator
+    except ImportError:
+        logger.warning("twilio package not installed; skipping signature verification")
+        return
+
+    validator = RequestValidator(settings.twilio_auth_token)
+    signature = request.headers.get("X-Twilio-Signature", "")
+    url = str(request.url)
+    form = await request.form()
+    params = dict(form)
+
+    if not validator.validate(url, params, signature):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +235,7 @@ async def twilio_webhook(
         <Say>How can I help you?</Say>
       </Gather>
     """
+    await _verify_twilio_signature(request)
     form = await request.form()
     store = get_voice_agent_store()
     config = await _await_if_needed(store.get(agent_id))

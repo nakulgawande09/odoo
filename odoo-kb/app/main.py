@@ -206,6 +206,11 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    from app.api.middleware.error_handler import (
+        RequestLoggingMiddleware,
+        register_error_handlers,
+    )
+
     app = FastAPI(
         title="Knowledge Base Service",
         description=(
@@ -217,6 +222,34 @@ def create_app() -> FastAPI:
         version="0.4.0",
         lifespan=lifespan,
     )
+
+    # Middleware (outermost first)
+    app.add_middleware(RequestLoggingMiddleware)
+
+    # Rate limiting (optional)
+    settings = get_settings()
+    if settings.rate_limit_enabled:
+        from app.api.middleware.rate_limit import (
+            InMemoryRateLimiter,
+            RateLimitMiddleware,
+            RedisRateLimiter,
+        )
+
+        if settings.cache_backend == "redis" and settings.redis_url:
+            # Redis limiter is created lazily in lifespan;
+            # use in-memory here as middleware is registered before lifespan
+            limiter = InMemoryRateLimiter(
+                max_requests=settings.rate_limit_per_minute,
+            )
+        else:
+            limiter = InMemoryRateLimiter(
+                max_requests=settings.rate_limit_per_minute,
+            )
+        app.add_middleware(RateLimitMiddleware, limiter=limiter)
+
+    # Exception handlers
+    register_error_handlers(app)
+
     app.include_router(v1_router)
     return app
 

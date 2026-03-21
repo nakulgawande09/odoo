@@ -53,6 +53,16 @@ class Settings(BaseSettings):
     redis_url: str = ""  # e.g. "redis://localhost:6379/0"
     cache_backend: str = "memory"  # "memory" | "redis"
 
+    # VOIP webhook security
+    voip_verify_signatures: bool = False
+    twilio_auth_token: str = ""
+    vonage_api_secret: str = ""
+
+    # Rate limiting
+    rate_limit_enabled: bool = False
+    rate_limit_per_minute: int = 60
+    rate_limit_burst: int = 10
+
     # Chunking
     chunk_size: int = 512
     chunk_overlap: int = 64
