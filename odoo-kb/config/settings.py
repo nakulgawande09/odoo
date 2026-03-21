@@ -58,6 +58,21 @@ class Settings(BaseSettings):
     reranker_model: str = ""  # e.g. "gpt-4o-mini" or "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_top_k: int = 20  # max candidates to rerank
 
+    # RAG answer synthesis
+    rag_enabled: bool = False
+    rag_llm_provider: str = "openai"   # "openai" | "anthropic" | "ollama" | "none"
+    rag_llm_model: str = "gpt-4o-mini"
+    rag_max_tokens: int = 300
+    rag_temperature: float = 0.3
+    rag_system_prompt: str = ""
+
+    # Anthropic (for RAG)
+    anthropic_api_key: str = ""
+
+    # Ollama (for RAG)
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3"
+
     # Query expansion
     query_expansion_provider: str = "static"  # "static" | "llm"
 

@@ -86,6 +86,46 @@
                                     icon="fa-microphone"/>
                         </div>
                     </block>
+                    <!-- AI Answer Synthesis (RAG) -->
+                    <block title="AI Answer Synthesis"
+                           help="Configure LLM-powered answer synthesis from search results">
+                        <setting string="Enable RAG"
+                                 help="Use an LLM to synthesize natural-language answers from KB search results">
+                            <field name="kb_rag_enabled"/>
+                        </setting>
+                        <setting string="LLM Provider"
+                                 invisible="not kb_rag_enabled"
+                                 help="Which LLM to use for answer synthesis">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_rag_provider" class="col-lg-3"/>
+                                    <field name="kb_rag_provider" class="col-lg-9"/>
+                                </div>
+                            </div>
+                        </setting>
+                        <setting string="Anthropic API Key"
+                                 invisible="kb_rag_provider != 'anthropic' or not kb_rag_enabled"
+                                 help="API key for Anthropic Claude models">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_anthropic_api_key" class="col-lg-3"/>
+                                    <field name="kb_anthropic_api_key" class="col-lg-9"
+                                           password="True"/>
+                                </div>
+                            </div>
+                        </setting>
+                        <setting string="Ollama URL"
+                                 invisible="kb_rag_provider != 'ollama' or not kb_rag_enabled"
+                                 help="URL for local Ollama instance">
+                            <div class="content-group">
+                                <div class="row mt16">
+                                    <label for="kb_ollama_url" class="col-lg-3"/>
+                                    <field name="kb_ollama_url" class="col-lg-9"/>
+                                </div>
+                            </div>
+                        </setting>
+                    </block>
+
                 </app>
             </xpath>
         </field>

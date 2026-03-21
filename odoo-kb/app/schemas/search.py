@@ -64,3 +64,36 @@ class SearchResponse(BaseModel):
     search_time_ms: float
     backends_used: list[str]
     enrichment: dict[str, Any] | None = None
+
+
+# ─── RAG Synthesis Schemas ───────────────────────────────────
+
+class RAGOptions(BaseModel):
+    """RAG synthesis options for the search API."""
+    enabled: bool = True
+    model: str | None = None
+    system_prompt: str | None = None
+    max_tokens: int = 500
+    temperature: float = 0.3
+
+class SearchWithSynthesisRequest(BaseModel):
+    """Search + LLM synthesis in one call."""
+    query: str = Field(..., min_length=1, max_length=2000)
+    limit: int = Field(default=5, ge=1, le=20)
+    filters: dict[str, str | list[str]] | None = None
+    source: str = "search"
+    conversation_id: str | None = None
+    tenant_id: str | None = None
+    rag: RAGOptions = Field(default_factory=RAGOptions)
+
+
+class SearchWithSynthesisResponse(BaseModel):
+    """Response with both search results and a synthesized answer."""
+    query: str
+    answer: str
+    model_used: str | None = None
+    sources: list[SearchResultItem]
+    parsed_intent: str | None = None
+    search_time_ms: float
+    synthesis_time_ms: float | None = None
+    fallback_used: bool = False

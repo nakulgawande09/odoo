@@ -24,8 +24,8 @@ from pydantic import BaseModel, Field
 
 from app.api.auth import verify_api_key
 from app.core.voice_agent_config import VoiceAgentConfig, VoiceAgentStore
-from app.dependencies import get_orchestrator, get_query_logger, get_voice_agent_store
-from app.schemas.search import SearchRequest
+from app.dependencies import get_answer_synthesizer, get_orchestrator, get_query_logger, get_voice_agent_store
+from app.schemas.search import SearchRequest, SearchResultItem
 
 logger = logging.getLogger(__name__)
 
@@ -135,8 +135,8 @@ async def voip_query(
     )
     search_response = await orchestrator.search(search_request)
 
-    # Build TTS-friendly answer using agent config
-    answer, confidence = _build_answer(search_response.results, config)
+    # Build TTS-friendly answer using agent config (with optional RAG synthesis)
+    answer, confidence = await _resolve_answer(request.query, search_response.results, config)
     sources = [
         VOIPSource(
             title=r.title,
@@ -226,7 +226,7 @@ async def twilio_webhook(
         conversation_id=str(call_sid),
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results, config)
+    answer, confidence = await _resolve_answer(query, search_response.results, config)
 
     if confidence < config.confidence_threshold:
         escalation_msg = config.escalation_message or config.low_confidence_message
@@ -270,7 +270,7 @@ async def vonage_webhook(
         conversation_id=call_uuid,
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results, config)
+    answer, confidence = await _resolve_answer(query, search_response.results, config)
 
     ncco: list[dict] = [{"action": "talk", "text": answer, "bargeIn": True}]
 
@@ -312,7 +312,7 @@ async def sip_webhook(
         conversation_id=channel or None,
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results, config)
+    answer, confidence = await _resolve_answer(query, search_response.results, config)
 
     return {
         "status": "ok",
@@ -326,6 +326,24 @@ async def sip_webhook(
 
 
 # ─── Helpers ──────────────────────────────────────────────────
+
+async def _resolve_answer(
+    query: str,
+    results: list[SearchResultItem],
+    config: VoiceAgentConfig,
+) -> tuple[str, float]:
+    """Synthesize via LLM if RAG is enabled, otherwise fall back to raw chunk."""
+    synthesizer = get_answer_synthesizer()
+    if synthesizer and config.rag_enabled:
+        rag_config = config.to_rag_config()
+        synthesis = await synthesizer.synthesize(
+            query, results, rag_config,
+            no_answer_message=config.no_answer_message,
+        )
+        confidence = results[0].relevance_score if results else 0.0
+        return synthesis.answer, confidence
+    return _build_answer(results, config)
+
 
 def _build_answer(
     results: list, config: VoiceAgentConfig | None = None

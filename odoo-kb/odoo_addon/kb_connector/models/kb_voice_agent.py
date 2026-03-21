@@ -135,6 +135,30 @@ class KBVoiceAgent(models.Model):
         default="Let me connect you with a live agent. Please hold.",
     )
 
+    # RAG Answer Synthesis
+    rag_enabled = fields.Boolean(
+        "Enable AI Answer Synthesis",
+        default=False,
+        help="Use an LLM to synthesize natural-language answers from search results.",
+    )
+    rag_llm_provider = fields.Selection(
+        [("openai", "OpenAI"), ("anthropic", "Anthropic Claude"), ("ollama", "Local (Ollama)")],
+        string="LLM Provider",
+        default="openai",
+    )
+    rag_llm_model = fields.Char(
+        "LLM Model",
+        default="gpt-4o-mini",
+        help="e.g. gpt-4o-mini, claude-sonnet-4-20250514, llama3",
+    )
+    rag_system_prompt = fields.Text(
+        "System Prompt",
+        help="Custom system prompt for answer synthesis. Leave empty for the default TTS-optimized prompt.",
+    )
+    rag_max_tokens = fields.Integer("Max Answer Tokens", default=300)
+    rag_temperature = fields.Float("Temperature", default=0.3)
+    rag_max_context_chunks = fields.Integer("Max Context Chunks", default=5)
+
     # Working hours
     active_hours_enabled = fields.Boolean(
         "Restrict to Working Hours",
@@ -326,4 +350,11 @@ class KBVoiceAgent(models.Model):
             "escalation_mode": self.escalation_mode,
             "escalation_number": self.escalation_number,
             "escalation_message": self.escalation_message,
+            "rag_enabled": self.rag_enabled,
+            "rag_llm_provider": self.rag_llm_provider or "openai",
+            "rag_llm_model": self.rag_llm_model or "gpt-4o-mini",
+            "rag_system_prompt": self.rag_system_prompt or "",
+            "rag_max_tokens": self.rag_max_tokens or 300,
+            "rag_temperature": self.rag_temperature or 0.3,
+            "rag_max_context_chunks": self.rag_max_context_chunks or 5,
         }

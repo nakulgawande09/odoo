@@ -87,7 +87,30 @@
                             </group>
                         </page>
 
-                        <!-- Tab 3: Escalation -->
+                        <!-- Tab 3: AI Answer Synthesis -->
+                        <page string="AI Synthesis" name="rag">
+                            <group>
+                                <group string="RAG Settings">
+                                    <field name="rag_enabled"/>
+                                    <field name="rag_llm_provider" invisible="not rag_enabled"/>
+                                    <field name="rag_llm_model" invisible="not rag_enabled"/>
+                                    <field name="rag_max_tokens" invisible="not rag_enabled"/>
+                                    <field name="rag_temperature" invisible="not rag_enabled"/>
+                                    <field name="rag_max_context_chunks" invisible="not rag_enabled"/>
+                                </group>
+                                <group string="Custom Prompt" invisible="not rag_enabled">
+                                    <field name="rag_system_prompt"
+                                           placeholder="Leave empty for the default TTS-optimized prompt..."/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info" role="alert" invisible="not rag_enabled">
+                                When enabled, the AI will synthesize a conversational answer from
+                                search results instead of returning raw document text. This produces
+                                more natural responses for phone callers.
+                            </div>
+                        </page>
+
+                        <!-- Tab 4: Escalation -->
                         <page string="Escalation" name="escalation">
                             <group>
                                 <group string="When Agent Can't Answer">

@@ -100,6 +100,17 @@ async def lifespan(app: FastAPI):
     # Voice agent config store
     voice_agent_store = VoiceAgentStore()
 
+    # RAG answer synthesizer (optional)
+    answer_synthesizer = None
+    if settings.rag_enabled:
+        from app.core.llm_provider import create_llm_provider
+        from app.core.answer_synthesizer import AnswerSynthesizer
+
+        llm_provider = create_llm_provider(settings)
+        if llm_provider:
+            answer_synthesizer = AnswerSynthesizer(llm_provider)
+            logger.info("RAG answer synthesis enabled (provider=%s)", settings.rag_llm_provider)
+
     # Cache stats aggregator
     def cache_stats():
         return {
@@ -142,6 +153,7 @@ async def lifespan(app: FastAPI):
         query_logger=query_logger,
         cache_stats_fn=cache_stats,
         voice_agent_store=voice_agent_store,
+        answer_synthesizer=answer_synthesizer,
     )
 
     logger.info(

@@ -22,8 +22,10 @@ html = ["beautifulsoup4>=4.12"]
 local-embeddings = ["sentence-transformers>=2.0"]
 qdrant = ["qdrant-client>=1.9.0"]
 enrichment = ["tavily-python>=0.3"]
+anthropic = ["anthropic>=0.30"]
 all = [
     "openai>=1.0",
+    "anthropic>=0.30",
     "pdfplumber>=0.11.0",
     "beautifulsoup4>=4.12",
     "sentence-transformers>=2.0",

@@ -7,6 +7,7 @@ method signatures.
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
 from app.schemas.document import ChunkData
@@ -115,4 +116,17 @@ class QueryExpander(Protocol):
     """Expands queries with synonyms and related terms."""
 
     async def expand(self, query: str, max_additions: int = 3) -> str:
+        ...
+
+
+@runtime_checkable
+class LLMProvider(Protocol):
+    """Provider-agnostic interface for LLM text generation."""
+
+    async def generate(self, messages: list[dict[str, str]], **kwargs) -> str:
+        ...
+
+    async def generate_stream(
+        self, messages: list[dict[str, str]], **kwargs
+    ) -> AsyncIterator[str]:
         ...

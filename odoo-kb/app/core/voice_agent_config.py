@@ -40,6 +40,30 @@ class VoiceAgentConfig:
     escalation_number: str = ""
     escalation_message: str = "Let me connect you with a live agent. Please hold."
 
+    # RAG answer synthesis
+    rag_enabled: bool = False
+    rag_llm_provider: str = "openai"
+    rag_llm_model: str = "gpt-4o-mini"
+    rag_system_prompt: str = ""
+    rag_max_tokens: int = 300
+    rag_temperature: float = 0.3
+    rag_max_context_chunks: int = 5
+
+    def to_rag_config(self) -> "RAGConfig":
+        """Build a RAGConfig from this agent's settings."""
+        from app.core.rag_config import RAGConfig
+
+        return RAGConfig(
+            enabled=self.rag_enabled,
+            llm_provider=self.rag_llm_provider,
+            llm_model=self.rag_llm_model,
+            system_prompt=self.rag_system_prompt,
+            max_tokens=self.rag_max_tokens,
+            temperature=self.rag_temperature,
+            max_context_chunks=self.rag_max_context_chunks,
+            channel="voip",
+        )
+
 
 # Default config used when no agent_id is specified
 DEFAULT_CONFIG = VoiceAgentConfig(agent_id=0)

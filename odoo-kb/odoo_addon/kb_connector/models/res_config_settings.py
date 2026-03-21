@@ -53,3 +53,25 @@ class ResConfigSettings(models.TransientModel):
         "Vonage API Secret",
         config_parameter="kb.vonage.api_secret",
     )
+
+    # RAG Answer Synthesis
+    kb_rag_enabled = fields.Boolean(
+        "Enable RAG Answer Synthesis",
+        config_parameter="kb.rag.enabled",
+        default=False,
+    )
+    kb_rag_provider = fields.Selection(
+        [("openai", "OpenAI"), ("anthropic", "Anthropic Claude"), ("ollama", "Local (Ollama)")],
+        string="RAG LLM Provider",
+        config_parameter="kb.rag.provider",
+        default="openai",
+    )
+    kb_anthropic_api_key = fields.Char(
+        "Anthropic API Key",
+        config_parameter="kb.anthropic.api_key",
+    )
+    kb_ollama_url = fields.Char(
+        "Ollama URL",
+        config_parameter="kb.ollama.url",
+        default="http://localhost:11434",
+    )
