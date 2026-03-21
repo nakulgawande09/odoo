@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!-- Systray button -->
+    <t t-name="knowledge_base_connector.SystrayItem">
+        <div class="o_nav_entry" t-on-click="togglePanel"
+             title="Search Knowledge Base">
+            <i class="fa fa-book"/>
+        </div>
+        <KBSearchPanel t-if="state.panelOpen" onClose.bind="closePanel"/>
+    </t>
+
+    <!-- Side panel -->
+    <t t-name="knowledge_base_connector.SearchPanel">
+        <div class="o_kb_search_panel">
+            <div class="o_kb_search_header">
+                <input type="text"
+                       placeholder="Search knowledge base..."
+                       t-att-value="state.query"
+                       t-on-input="onInput"
+                       t-on-keydown="onKeydown"
+                       t-ref="searchInput"/>
+                <span class="o_kb_close" t-on-click="props.onClose">
+                    <i class="fa fa-times"/>
+                </span>
+            </div>
+            <div class="o_kb_results">
+                <div t-if="state.loading" class="o_kb_loading">
+                    <i class="fa fa-spinner fa-spin"/> Searching...
+                </div>
+                <t t-elif="state.results.length > 0">
+                    <div t-foreach="state.results" t-as="result" t-key="result.document_id"
+                         class="o_kb_result_item">
+                        <div class="o_kb_result_title" t-out="result.title"/>
+                        <div class="o_kb_result_snippet" t-out="result.snippet"/>
+                        <div class="o_kb_result_score">
+                            Relevance: <t t-out="formatScore(result.relevance_score)"/>
+                        </div>
+                    </div>
+                </t>
+                <div t-elif="state.searched" class="o_kb_empty">
+                    No results found.
+                </div>
+                <div t-else="" class="o_kb_empty">
+                    Type a question to search the knowledge base.
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

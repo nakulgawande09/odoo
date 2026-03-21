@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.kb</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base_setup.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//app[@name='base_setup']" position="inside">
+                <block title="Knowledge Base" name="kb_settings">
+                    <setting string="KB Service URL"
+                             help="Base URL of the Knowledge Base microservice">
+                        <field name="kb_service_url" placeholder="http://localhost:8100"/>
+                    </setting>
+                    <setting string="KB API Key"
+                             help="API key for authenticating with the KB service">
+                        <field name="kb_api_key" password="True"/>
+                    </setting>
+                    <setting string="Auto-sync Documents"
+                             help="Automatically push new/updated records to the KB">
+                        <field name="kb_auto_sync"/>
+                    </setting>
+                    <setting string="Models to Sync"
+                             help="Comma-separated Odoo model names to sync">
+                        <field name="kb_sync_models"
+                               placeholder="product.template,helpdesk.article"
+                               invisible="not kb_auto_sync"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -223,6 +223,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Metrics endpoint and middleware
+    from app.api.middleware.metrics import MetricsMiddleware, register_metrics_endpoint
+    app.add_middleware(MetricsMiddleware)
+    register_metrics_endpoint(app)
+
     # Middleware (outermost first)
     app.add_middleware(RequestLoggingMiddleware)
 

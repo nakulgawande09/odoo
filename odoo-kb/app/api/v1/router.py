@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import analytics, documents, health, ingest, search, voip
+from app.api.v1 import analytics, documents, health, ingest, search, voip, ws
 
 router = APIRouter(prefix="/v1")
 router.include_router(search.router, tags=["search"])
@@ -12,3 +12,4 @@ router.include_router(documents.router, tags=["documents"])
 router.include_router(health.router, tags=["health"])
 router.include_router(analytics.router, tags=["analytics"])
 router.include_router(voip.router, tags=["voip"])
+router.include_router(ws.router, tags=["websocket"])

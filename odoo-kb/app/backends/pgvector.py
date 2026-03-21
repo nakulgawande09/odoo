@@ -156,6 +156,16 @@ class PgVectorBackend:
                     )
                 )
 
+    async def get_document_chunks(self, document_id: str) -> list[ChunkRecord]:
+        """Get all chunks for a document, ordered by chunk_index."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(ChunkRecord)
+                .where(ChunkRecord.document_id == document_id)
+                .order_by(ChunkRecord.chunk_index)
+            )
+            return list(result.scalars().all())
+
     async def create_document(
         self,
         doc_id: str,

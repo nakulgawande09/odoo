@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View -->
+    <record id="kb_document_view_list" model="ir.ui.view">
+        <field name="name">kb.document.list</field>
+        <field name="model">kb.document</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="content_type"/>
+                <field name="source_model"/>
+                <field name="source_id"/>
+                <field name="tags"/>
+                <field name="state"
+                       decoration-success="state == 'synced'"
+                       decoration-danger="state == 'error'"
+                       decoration-info="state == 'draft'"
+                       widget="badge"/>
+                <field name="write_date"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="kb_document_view_form" model="ir.ui.view">
+        <field name="name">kb.document.form</field>
+        <field name="model">kb.document</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_sync_to_kb" type="object"
+                            string="Sync to KB" class="oe_highlight"
+                            invisible="state == 'synced'"/>
+                    <button name="action_sync_to_kb" type="object"
+                            string="Re-sync" invisible="state != 'synced'"/>
+                    <button name="action_delete_from_kb" type="object"
+                            string="Remove from KB"
+                            invisible="not kb_document_id"
+                            confirm="Remove this document from the Knowledge Base?"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,synced"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="content_type"/>
+                            <field name="tags"/>
+                        </group>
+                        <group>
+                            <field name="kb_document_id"/>
+                            <field name="source_model"/>
+                            <field name="source_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Content">
+                            <field name="content"/>
+                        </page>
+                        <page string="Error" invisible="state != 'error'">
+                            <field name="error_message"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="kb_document_action" model="ir.actions.act_window">
+        <field name="name">KB Documents</field>
+        <field name="res_model">kb.document</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- Menu -->
+    <menuitem id="kb_menu_root" name="Knowledge Base"
+              web_icon="knowledge_base_connector,static/description/icon.png"
+              groups="base.group_user"/>
+    <menuitem id="kb_menu_documents" name="Documents"
+              parent="kb_menu_root"
+              action="kb_document_action"/>
+</odoo>
