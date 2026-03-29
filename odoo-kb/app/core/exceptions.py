@@ -21,5 +21,9 @@ class EmbeddingError(KBError):
     """Error generating embeddings."""
 
 
+class TTSError(KBError):
+    """Error during text-to-speech synthesis."""
+
+
 class DocumentNotFoundError(KBError):
     """Requested document does not exist."""

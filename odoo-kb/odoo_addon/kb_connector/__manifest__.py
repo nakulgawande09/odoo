@@ -1,6 +1,6 @@
 {
     "name": "Knowledge Base Connector",
-    "version": "18.0.2.0.0",
+    "version": "19.0.2.0.0",
     "category": "Productivity",
     "summary": "Connect Odoo to the Knowledge Base microservice with VOIP support",
     "description": """
@@ -12,10 +12,11 @@
         - Voice Agent configuration for Twilio, Vonage, Asterisk
         - Webhook URL generation and one-click test buttons
     """,
-    "depends": ["base", "mail"],
+    "depends": ["base", "mail", "product"],
     "data": [
         "security/ir.model.access.csv",
         "data/ir_config_parameter.xml",
+        "views/kb_document_views.xml",
         "views/kb_voice_agent_views.xml",
         "views/res_config_settings_views.xml",
     ],

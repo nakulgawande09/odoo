@@ -38,8 +38,11 @@ class Settings(BaseSettings):
     odoo_user: str = ""
     odoo_password: str = ""
 
+    # Gemini
+    gemini_api_key: str = ""
+
     # Embeddings
-    embedding_provider: str = "openai"  # "openai" | "local"
+    embedding_provider: str = "openai"  # "openai" | "local" | "gemini"
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
     openai_api_key: str = ""
@@ -79,6 +82,36 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     google_cse_id: str = ""
 
+    # TTS
+    tts_provider: str = "none"  # "none" | "gemini"
+    tts_model: str = "gemini-2.5-flash"
+    tts_voice: str = "Kore"
+    tts_language: str = "en-US"
+    tts_sample_rate: int = 24000
+
+    # Public URL (for webhook eventUrl callbacks, e.g. ngrok URL)
+    public_url: str = ""
+
+    # Vonage
+    vonage_api_key: str = ""
+    vonage_api_secret: str = ""
+    vonage_application_id: str = ""
+    vonage_private_key_path: str = ""
+
+    # CRM Integration
+    crm_auto_create: bool = True
+    crm_min_duration: int = 30  # Min call seconds to create a lead
+    crm_analysis_model: str = "gemini-2.5-flash"
+    crm_analysis_timeout: float = 15.0
+
+    # Messaging (WhatsApp/SMS)
+    vonage_whatsapp_number: str = ""
+    vonage_sms_from: str = ""
+    notify_team_numbers: list[str] = []
+    notify_on_priority: str = "hot,warm"  # Comma-separated priorities
+    caller_followup_enabled: bool = True
+    caller_followup_channel: str = "whatsapp"  # "whatsapp" | "sms"
+
     # Filter taxonomy
     filter_taxonomy_path: str = "config/filters.yaml"
 
@@ -90,6 +123,16 @@ class Settings(BaseSettings):
                 return json.loads(v)
             except json.JSONDecodeError:
                 return {}
+        return v
+
+    @field_validator("notify_team_numbers", mode="before")
+    @classmethod
+    def parse_team_numbers(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [n.strip() for n in v.split(",") if n.strip()]
         return v
 
     @field_validator("api_keys", mode="before")

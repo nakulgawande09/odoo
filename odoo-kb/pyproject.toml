@@ -2,7 +2,7 @@
 name = "odoo-kb"
 version = "0.1.0"
 description = "Knowledge Base microservice with swappable search backends"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
+gemini = ["google-genai>=1.0"]
 pdf = ["pdfplumber>=0.11.0"]
 html = ["beautifulsoup4>=4.12"]
 local-embeddings = ["sentence-transformers>=2.0"]
@@ -24,6 +25,7 @@ qdrant = ["qdrant-client>=1.9.0"]
 enrichment = ["tavily-python>=0.3"]
 all = [
     "openai>=1.0",
+    "google-genai>=1.0",
     "pdfplumber>=0.11.0",
     "beautifulsoup4>=4.12",
     "sentence-transformers>=2.0",
@@ -39,6 +41,9 @@ dev = [
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "config*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

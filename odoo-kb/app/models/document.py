@@ -65,7 +65,7 @@ class ChunkRecord(Base):
     )
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(1536))  # dimension set at migration time
+    embedding = Column(Vector(768))  # dimension set at migration time
     metadata_ = Column("metadata", JSONB, default=dict)
     created_at = Column(
         DateTime(timezone=True),

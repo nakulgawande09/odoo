@@ -35,3 +35,10 @@ Developers can start with [the developer tutorials](https://www.odoo.com/documen
 
 If you believe you have found a security issue, check our [Responsible Disclosure page](https://www.odoo.com/security-report)
 for details and get in touch with us via email.
+
+make dev # Install all deps
+make test # Run 80 tests
+make demo # Start services + seed 5 demo documents
+make demo-search q='return policy' # Search from CLI
+make demo-voip q='shipping info' # Test VOIP webhook
+make clean # Tear down everything

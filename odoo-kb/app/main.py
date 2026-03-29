@@ -17,6 +17,7 @@ from app.core.query_logger import QueryLogger
 from app.core.query_preprocessor import create_preprocessor
 from app.core.reranker import create_reranker
 from app.core.search_service import SearchOrchestrator
+from app.core.tts import create_tts_provider
 from app.core.voice_agent_config import VoiceAgentStore
 from app.dependencies import get_settings, set_services
 from app.ingestion.chunker import RecursiveChunker
@@ -100,6 +101,30 @@ async def lifespan(app: FastAPI):
     # Voice agent config store
     voice_agent_store = VoiceAgentStore()
 
+    # Call tracker (uses same session factory as query logger)
+    call_tracker = None
+    if session_factory:
+        from app.core.call_tracker import CallTracker
+        call_tracker = CallTracker(session_factory=session_factory)
+        logger.info("Call tracker initialized")
+
+    # CRM analyzer (optional — requires Gemini API key)
+    from app.core.crm_analyzer import create_crm_analyzer
+    crm_analyzer = create_crm_analyzer(settings)
+    if crm_analyzer:
+        logger.info("CRM analyzer initialized (model=%s)", settings.crm_analysis_model)
+
+    # Vonage Messages client (optional — WhatsApp/SMS)
+    from app.clients.vonage_messages import create_vonage_messages_client
+    vonage_messages_client = create_vonage_messages_client(settings)
+    if vonage_messages_client:
+        logger.info("Vonage Messages client initialized (WhatsApp/SMS)")
+
+    # TTS provider (optional)
+    tts_provider = create_tts_provider(settings)
+    if tts_provider:
+        logger.info("TTS provider initialized: %s", tts_provider.provider_name)
+
     # Cache stats aggregator
     def cache_stats():
         return {
@@ -142,15 +167,21 @@ async def lifespan(app: FastAPI):
         query_logger=query_logger,
         cache_stats_fn=cache_stats,
         voice_agent_store=voice_agent_store,
+        tts_provider=tts_provider,
+        call_tracker=call_tracker,
+        session_factory=session_factory,
+        crm_analyzer=crm_analyzer,
+        vonage_messages_client=vonage_messages_client,
     )
 
     logger.info(
         "KB service started (backend=%s, embedder=%s, reranker=%s, "
-        "expander=%s, cache=enabled, logging=enabled)",
+        "expander=%s, tts=%s, cache=enabled, logging=enabled)",
         settings.search_backend,
         settings.embedding_provider,
         settings.reranker_provider,
         settings.query_expansion_provider,
+        settings.tts_provider,
     )
 
     yield

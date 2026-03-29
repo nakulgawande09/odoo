@@ -93,10 +93,63 @@ class LocalEmbedder:
         return [e.tolist() for e in embeddings]
 
 
-def create_embedder(settings: Any) -> OpenAIEmbedder | LocalEmbedder:
+class GeminiEmbedder:
+    """Generates embeddings using Google Gemini API."""
+
+    def __init__(self, settings: Any) -> None:
+        self._model = settings.embedding_model
+        self._dimensions = settings.embedding_dimensions
+        self._api_key = settings.gemini_api_key
+        self._client = None
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                from google import genai
+                self._client = genai.Client(api_key=self._api_key)
+            except ImportError:
+                raise EmbeddingError(
+                    "google-genai package required. Install with: "
+                    "pip install google-genai"
+                )
+        return self._client
+
+    async def embed(self, text: str) -> list[float]:
+        results = await self.embed_batch([text])
+        return results[0]
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        import asyncio
+        client = self._get_client()
+        try:
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.models.embed_content(
+                    model=self._model,
+                    contents=texts,
+                    config={"output_dimensionality": self._dimensions},
+                ),
+            )
+            return [list(e.values) for e in response.embeddings]
+        except EmbeddingError:
+            raise
+        except Exception as e:
+            raise EmbeddingError(f"Gemini embedding failed: {e}") from e
+
+
+def create_embedder(settings: Any) -> OpenAIEmbedder | LocalEmbedder | GeminiEmbedder:
     """Factory to create the configured embedder."""
     if settings.embedding_provider == "openai":
         return OpenAIEmbedder(settings)
+    elif settings.embedding_provider == "gemini":
+        return GeminiEmbedder(settings)
     elif settings.embedding_provider == "local":
         return LocalEmbedder(settings)
     else:

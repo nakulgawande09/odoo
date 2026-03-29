@@ -21,6 +21,11 @@ _pipeline: Any = None
 _query_logger: Any = None
 _cache_stats_fn: Any = None
 _voice_agent_store: Any = None
+_tts_provider: Any = None
+_call_tracker: Any = None
+_session_factory: Any = None
+_crm_analyzer: Any = None
+_vonage_messages_client: Any = None
 
 
 def set_services(
@@ -32,9 +37,16 @@ def set_services(
     query_logger: Any = None,
     cache_stats_fn: Any = None,
     voice_agent_store: Any = None,
+    tts_provider: Any = None,
+    call_tracker: Any = None,
+    session_factory: Any = None,
+    crm_analyzer: Any = None,
+    vonage_messages_client: Any = None,
 ) -> None:
     global _backend, _embedder, _preprocessor, _orchestrator, _pipeline
-    global _query_logger, _cache_stats_fn, _voice_agent_store
+    global _query_logger, _cache_stats_fn, _voice_agent_store, _tts_provider
+    global _call_tracker, _session_factory, _crm_analyzer
+    global _vonage_messages_client
     _backend = backend
     _embedder = embedder
     _preprocessor = preprocessor
@@ -43,6 +55,11 @@ def set_services(
     _query_logger = query_logger
     _cache_stats_fn = cache_stats_fn
     _voice_agent_store = voice_agent_store
+    _tts_provider = tts_provider
+    _call_tracker = call_tracker
+    _session_factory = session_factory
+    _crm_analyzer = crm_analyzer
+    _vonage_messages_client = vonage_messages_client
 
 
 def get_backend():
@@ -75,8 +92,28 @@ def get_cache_stats():
     return None
 
 
+def get_tts_provider():
+    return _tts_provider
+
+
 def get_voice_agent_store():
     if _voice_agent_store is None:
         from app.core.voice_agent_config import VoiceAgentStore
         return VoiceAgentStore()  # Fallback empty store
     return _voice_agent_store
+
+
+def get_call_tracker():
+    return _call_tracker
+
+
+def get_session_factory():
+    return _session_factory
+
+
+def get_crm_analyzer():
+    return _crm_analyzer
+
+
+def get_vonage_messages_client():
+    return _vonage_messages_client

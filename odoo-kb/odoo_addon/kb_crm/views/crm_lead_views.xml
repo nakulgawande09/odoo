@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Extend CRM lead form with KB tab -->
+    <record id="crm_lead_view_form_kb" model="ir.ui.view">
+        <field name="name">crm.lead.form.kb</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_lead_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[last()]" position="after">
+                <page string="Voice AI" name="kb_voice_ai"
+                      invisible="not kb_call_uuid">
+                    <group>
+                        <group string="AI Analysis">
+                            <field name="kb_conversation_summary"/>
+                            <field name="kb_customer_intent"/>
+                            <field name="kb_ai_priority"
+                                   decoration-danger="kb_ai_priority == 'hot'"
+                                   decoration-warning="kb_ai_priority == 'warm'"/>
+                            <field name="kb_sentiment"
+                                   decoration-success="kb_sentiment == 'positive'"
+                                   decoration-danger="kb_sentiment == 'negative'"/>
+                            <field name="kb_suggested_action"/>
+                            <field name="kb_ai_confidence" widget="progressbar"/>
+                            <field name="kb_ai_tags"/>
+                        </group>
+                        <group string="Call Details">
+                            <field name="kb_call_uuid"/>
+                            <field name="kb_recording_url" widget="url"/>
+                        </group>
+                    </group>
+                    <group string="Transcript" invisible="not kb_transcript">
+                        <field name="kb_transcript" nolabel="1"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Add KB fields to tree view -->
+    <record id="crm_lead_view_tree_kb" model="ir.ui.view">
+        <field name="name">crm.lead.tree.kb</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_case_tree_view_oppor"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='priority']" position="after">
+                <field name="kb_ai_priority" optional="hide"/>
+                <field name="kb_customer_intent" optional="hide"/>
+                <field name="kb_sentiment" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Add "Sync from KB" button to tree view header -->
+    <record id="crm_lead_view_tree_kb_button" model="ir.ui.view">
+        <field name="name">crm.lead.tree.kb.button</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_case_tree_view_oppor"/>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="inside">
+                <header>
+                    <button name="action_sync_from_kb"
+                            string="Sync from KB"
+                            type="object"
+                            class="btn-secondary"/>
+                </header>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Search filter for voice-originated leads -->
+    <record id="crm_lead_view_search_kb" model="ir.ui.view">
+        <field name="name">crm.lead.search.kb</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.view_crm_case_opportunities_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[last()]" position="after">
+                <separator/>
+                <filter string="Voice Calls" name="voice_calls"
+                        domain="[('kb_call_uuid', '!=', False)]"/>
+                <filter string="Hot (AI)" name="ai_hot"
+                        domain="[('kb_ai_priority', '=', 'hot')]"/>
+                <filter string="Negative Sentiment" name="negative_sentiment"
+                        domain="[('kb_sentiment', '=', 'negative')]"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

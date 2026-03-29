@@ -80,12 +80,12 @@ class PgVectorBackend:
                     d.metadata AS doc_metadata,
                     d.created_at,
                     d.updated_at,
-                    1 - (c.embedding <=> :embedding::vector) AS similarity
+                    1 - (c.embedding <=> CAST(:embedding AS vector)) AS similarity
                 FROM kb_chunks c
                 JOIN kb_documents d ON d.id = c.document_id
                 WHERE d.status = 'indexed'
                 {tenant_clause}
-                ORDER BY c.embedding <=> :embedding::vector
+                ORDER BY c.embedding <=> CAST(:embedding AS vector)
                 LIMIT :limit OFFSET :offset
             """)
             result = await session.execute(stmt, params)

@@ -26,11 +26,6 @@
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
-                        <button class="oe_stat_button" icon="fa-phone"
-                                name="action_view_stats" type="object"
-                                invisible="total_calls == 0">
-                            <field name="total_calls" string="Calls" widget="statinfo"/>
-                        </button>
                     </div>
                     <widget name="web_ribbon" title="Archived"
                             bg_color="text-bg-danger"
@@ -156,7 +151,7 @@
         <field name="name">kb.voice.agent.tree</field>
         <field name="model">kb.voice.agent</field>
         <field name="arch" type="xml">
-            <tree string="Voice Agents">
+            <list string="Voice Agents">
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="voip_provider"/>
@@ -165,7 +160,7 @@
                 <field name="avg_confidence" widget="percentage"/>
                 <field name="last_call_at"/>
                 <field name="active" column_invisible="True"/>
-            </tree>
+            </list>
         </field>
     </record>
 
@@ -173,7 +168,7 @@
     <record id="kb_voice_agent_action" model="ir.actions.act_window">
         <field name="name">Voice Agents</field>
         <field name="res_model">kb.voice.agent</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Create your first Voice Agent
@@ -191,6 +186,12 @@
               name="Knowledge Base"
               web_icon="kb_connector,static/description/icon.png"
               sequence="90"/>
+
+    <menuitem id="kb_menu_documents"
+              name="Documents"
+              parent="kb_menu_root"
+              action="kb_document_action"
+              sequence="5"/>
 
     <menuitem id="kb_menu_voip"
               name="Voice Agents"

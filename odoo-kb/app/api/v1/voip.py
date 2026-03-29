@@ -20,11 +20,12 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.api.auth import verify_api_key
 from app.core.voice_agent_config import VoiceAgentConfig, VoiceAgentStore
-from app.dependencies import get_orchestrator, get_query_logger, get_voice_agent_store
+from app.dependencies import get_orchestrator, get_query_logger, get_tts_provider, get_voice_agent_store
 from app.schemas.search import SearchRequest
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,96 @@ async def voip_query(
     )
 
 
+# ─── Audio Endpoint ──────────────────────────────────────────
+
+@router.post("/voip/query/audio")
+async def voip_query_audio(
+    request: VOIPQueryRequest,
+    agent_id: int | None = Query(None),
+    _api_key: str | None = Depends(verify_api_key),
+    orchestrator=Depends(get_orchestrator),
+) -> Response:
+    """VOIP webhook that returns audio (WAV) instead of text.
+
+    Requires TTS provider to be configured (KB_TTS_PROVIDER=gemini).
+    Falls back to JSON text response if TTS is unavailable.
+    """
+    tts = get_tts_provider()
+    if tts is None:
+        return await voip_query(request, agent_id, _api_key, orchestrator)
+
+    start = time.monotonic()
+    call_id = request.call_id or str(uuid.uuid4())
+
+    # Load agent config
+    effective_agent_id = request.agent_id or agent_id
+    store = get_voice_agent_store()
+    config = store.get(effective_agent_id)
+
+    # Search KB
+    search_request = SearchRequest(
+        query=request.query,
+        limit=request.max_results or config.max_results,
+        source=f"voip_{request.provider}",
+        conversation_id=call_id,
+    )
+    search_response = await orchestrator.search(search_request)
+    answer, confidence = _build_answer(search_response.results, config)
+
+    # Build full response text with optional follow-up
+    follow_up = None
+    if config.follow_up_enabled:
+        follow_up = _suggest_follow_up(search_response.parsed_intent)
+
+    full_text = answer
+    if follow_up:
+        full_text += f" {follow_up}"
+
+    # Synthesize audio
+    try:
+        voice = config.tts_voice if config.tts_voice != "default" else None
+        audio_bytes = await tts.synthesize(
+            text=full_text,
+            voice=voice,
+            language=config.tts_language,
+        )
+    except Exception as e:
+        logger.warning("TTS synthesis failed, returning text: %s", e)
+        return await voip_query(request, agent_id, _api_key, orchestrator)
+
+    elapsed_ms = (time.monotonic() - start) * 1000
+
+    # Log VOIP query
+    query_logger = get_query_logger()
+    if query_logger:
+        import asyncio
+        asyncio.create_task(
+            query_logger.log(
+                query=request.query,
+                processed_query={
+                    "intent": search_response.parsed_intent,
+                    "source": f"voip_{request.provider}",
+                    "call_id": call_id,
+                    "format": "audio",
+                },
+                results_count=len(search_response.results),
+                source=f"voip_{request.provider}",
+                conversation_id=call_id,
+                search_time_ms=elapsed_ms,
+            )
+        )
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/wav",
+        headers={
+            "X-Call-Id": call_id,
+            "X-Confidence": str(round(confidence, 4)),
+            "X-Response-Time-Ms": str(round(elapsed_ms, 2)),
+        },
+    )
+
+
 # ─── Twilio Webhook ──────────────────────────────────────────
 
 @router.post("/voip/twilio")
@@ -242,13 +333,20 @@ async def twilio_webhook(
 
 # ─── Vonage (Nexmo) Webhook ──────────────────────────────────
 
-@router.post("/voip/vonage")
+@router.post("/voip/vonage", deprecated=True)
 async def vonage_webhook(
     request: Request,
     agent_id: int | None = Query(None),
     orchestrator=Depends(get_orchestrator),
 ) -> list[dict]:
-    """Vonage Voice API webhook. Returns NCCO actions."""
+    """Vonage Voice API webhook. Returns NCCO actions.
+
+    .. deprecated::
+        Use /v1/voip/vonage/answer (Answer URL) and
+        /v1/voip/vonage/event (Event URL) instead.
+        This combined endpoint does not handle the initial
+        call greeting correctly.
+    """
     body = await request.json()
     store = get_voice_agent_store()
     config = store.get(agent_id)
