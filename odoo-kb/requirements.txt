@@ -12,6 +12,9 @@ pyyaml>=6.0
 # Gemini (embeddings + TTS)
 google-genai>=1.0
 
+# Vonage Messages API (JWT auth)
+PyJWT>=2.0
+
 # Document parsing
 pdfplumber>=0.11.0
 beautifulsoup4>=4.12

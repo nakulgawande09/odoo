@@ -31,6 +31,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _mask_phone(number: str) -> str:
+    """Mask a phone number for safe logging, e.g. +1555***4567."""
+    if not number or len(number) < 7:
+        return "***"
+    return number[:4] + "***" + number[-4:]
+
+
 @router.post("/messaging/inbound")
 async def messaging_inbound(
     request: Request,
@@ -47,13 +54,11 @@ async def messaging_inbound(
     recipient = body.get("to", "")
     text = body.get("text", "")
     message_uuid = body.get("message_uuid", "")
-    timestamp = body.get("timestamp", "")
 
     logger.info(
-        "Inbound %s from %s: %s",
+        "Inbound %s from %s: (message received)",
         channel,
-        sender,
-        text[:80] if text else "(empty)",
+        _mask_phone(sender),
     )
 
     if not text.strip():
@@ -95,7 +100,7 @@ async def messaging_inbound(
     logger.info(
         "Messaging reply: channel=%s, to=%s, results=%d, time=%.1fms",
         channel,
-        sender,
+        _mask_phone(sender),
         len(search_response.results),
         elapsed_ms,
     )
@@ -145,7 +150,6 @@ async def messaging_status(request: Request) -> dict:
 
     message_uuid = body.get("message_uuid", "")
     status = body.get("status", "")
-    timestamp = body.get("timestamp", "")
     channel = body.get("channel", "")
 
     logger.info(
@@ -185,9 +189,10 @@ async def messaging_log(
         if channel:
             query = query.where(MessageLog.channel == channel)
         if sender:
+            safe_sender = sender.replace("%", r"\%").replace("_", r"\_")
             query = query.where(
-                (MessageLog.sender.ilike(f"%{sender}%"))
-                | (MessageLog.recipient.ilike(f"%{sender}%"))
+                (MessageLog.sender.ilike(f"%{safe_sender}%"))
+                | (MessageLog.recipient.ilike(f"%{safe_sender}%"))
             )
 
         # Count total
@@ -195,9 +200,10 @@ async def messaging_log(
         if channel:
             count_q = count_q.where(MessageLog.channel == channel)
         if sender:
+            safe_sender = sender.replace("%", r"\%").replace("_", r"\_")
             count_q = count_q.where(
-                (MessageLog.sender.ilike(f"%{sender}%"))
-                | (MessageLog.recipient.ilike(f"%{sender}%"))
+                (MessageLog.sender.ilike(f"%{safe_sender}%"))
+                | (MessageLog.recipient.ilike(f"%{safe_sender}%"))
             )
         total = (await session.execute(count_q)).scalar() or 0
 

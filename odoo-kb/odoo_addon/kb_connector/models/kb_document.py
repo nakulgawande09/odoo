@@ -38,6 +38,7 @@ CONTENT_TYPE_MAP = {
 
 class KBDocument(models.Model):
     _name = "kb.document"
+    _inherit = ["mail.thread", "mail.activity.mixin"]
     _description = "Knowledge Base Document"
     _order = "write_date desc"
 
@@ -242,8 +243,8 @@ class KBDocument(models.Model):
     def write(self, vals):
         result = super().write(vals)
         content_fields = {"content", "attachment_ids", "name", "tags", "document_type"}
-        if content_fields & set(vals.keys()):
-            for record in self:
+        if content_fields & set(vals.keys()) and not self.env.context.get("skip_auto_sync"):
+            for record in self.with_context(skip_auto_sync=True):
                 if record.auto_sync and (record.content or record.attachment_ids):
                     try:
                         # Remove old version first, then push new

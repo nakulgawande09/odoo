@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,7 +40,7 @@ def _generate_jwt(application_id: str, private_key: str) -> str:
         "application_id": application_id,
         "iat": now,
         "exp": now + 900,  # 15 minutes
-        "jti": f"{application_id}-{now}",
+        "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, private_key, algorithm="RS256")
 
@@ -192,10 +193,12 @@ class VonageMessagesClient:
 
         if response.status_code in (200, 202):
             data = response.json()
+            to_num = payload.get("to", "")
+            masked_to = to_num[:4] + "***" + to_num[-4:] if len(to_num) >= 7 else "***"
             logger.info(
                 "Message sent: channel=%s, to=%s, uuid=%s",
                 payload.get("channel"),
-                payload.get("to"),
+                masked_to,
                 data.get("message_uuid", ""),
             )
             return data

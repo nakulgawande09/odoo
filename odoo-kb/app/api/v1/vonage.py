@@ -38,6 +38,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _mask_phone(number: str) -> str:
+    """Mask a phone number for safe logging, e.g. +1555***4567."""
+    if not number or len(number) < 7:
+        return "***"
+    return number[:4] + "***" + number[-4:]
+
+
 def _get_public_url() -> str:
     """Resolve the public URL for webhook callbacks."""
     settings = get_settings()
@@ -103,7 +110,7 @@ async def vonage_answer(
     logger.info(
         "Vonage answer: uuid=%s, from=%s, agent_id=%s",
         call_uuid,
-        caller,
+        _mask_phone(caller),
         agent_id,
     )
 
@@ -267,7 +274,6 @@ async def vonage_recording(
     recording_url = body.get("recording_url", "")
     call_uuid = body.get("conversation_uuid", body.get("uuid", ""))
     size = body.get("size", 0)
-    timestamp = body.get("timestamp", "")
 
     logger.info(
         "Vonage recording: uuid=%s, url=%s, size=%d",
@@ -307,8 +313,6 @@ async def vonage_status(
 
     status = body.get("status", "")
     call_uuid = body.get("uuid", body.get("conversation_uuid", ""))
-    direction = body.get("direction", "")
-    timestamp = body.get("timestamp", "")
 
     logger.info(
         "Vonage status: uuid=%s, status=%s, direction=%s",
@@ -347,8 +351,11 @@ async def _finalize_call(tracker, call_uuid: str) -> None:
 
     crm_analyzer = get_crm_analyzer()
     analysis = None
+    settings = get_settings()
 
-    if crm_analyzer and record.transcript:
+    if crm_analyzer and record.transcript and (
+        record.duration_seconds and record.duration_seconds >= settings.crm_min_duration
+    ):
         try:
             analysis = await crm_analyzer.analyze(
                 transcript=record.transcript,
@@ -367,7 +374,6 @@ async def _finalize_call(tracker, call_uuid: str) -> None:
     if analysis:
         from app.dependencies import get_vonage_messages_client
         messages_client = get_vonage_messages_client()
-        settings = get_settings()
 
         if messages_client:
             try:

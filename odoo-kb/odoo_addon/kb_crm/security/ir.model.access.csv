@@ -1,3 +1,1 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_crm_lead_kb_user,crm.lead.kb.user,crm.model_crm_lead,crm.group_sale_salesman,1,1,1,0
-access_crm_lead_kb_manager,crm.lead.kb.manager,crm.model_crm_lead,crm.group_sale_manager,1,1,1,1

@@ -62,7 +62,7 @@ async def notify_triage_result(
             await messages_client.send_whatsapp(number, message)
             logger.info(
                 "Triage notification sent to %s for call %s",
-                number,
+                number[:4] + "***" + number[-4:] if len(number) >= 7 else "***",
                 call_record.call_uuid,
             )
         except Exception as e:
@@ -122,9 +122,10 @@ async def send_caller_followup(
         else:
             await messages_client.send_sms(caller, message)
 
+        masked = caller[:4] + "***" + caller[-4:] if len(caller) >= 7 else "***"
         logger.info(
             "Caller follow-up sent to %s via %s for call %s",
-            caller,
+            masked,
             channel,
             call_record.call_uuid,
         )

@@ -42,9 +42,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
 
     # Embeddings
-    embedding_provider: str = "openai"  # "openai" | "local" | "gemini"
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dimensions: int = 1536
+    embedding_provider: str = "gemini"  # "openai" | "local" | "gemini"
+    embedding_model: str = "models/gemini-embedding-001"
+    embedding_dimensions: int = 768
     openai_api_key: str = ""
 
     # LLM for query preprocessing

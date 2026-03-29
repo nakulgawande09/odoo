@@ -21,6 +21,13 @@ from app.models.call_record import CallRecord
 logger = logging.getLogger(__name__)
 
 
+def _mask_phone(number: str) -> str:
+    """Mask a phone number for safe logging."""
+    if not number or len(number) < 7:
+        return "***"
+    return number[:4] + "***" + number[-4:]
+
+
 @dataclass(frozen=True)
 class TranscriptTurn:
     """A single turn in a call transcript."""
@@ -124,7 +131,7 @@ class CallTracker:
             session.add(record)
             await session.commit()
 
-        logger.info("Call started: uuid=%s, caller=%s", call_uuid, caller_number)
+        logger.info("Call started: uuid=%s, caller=%s", call_uuid, _mask_phone(caller_number))
         return active
 
     def get_active(self, call_uuid: str) -> ActiveCall | None:

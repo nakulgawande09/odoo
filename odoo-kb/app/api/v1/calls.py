@@ -28,14 +28,16 @@ async def list_calls(
         if status:
             query = query.where(CallRecord.status == status)
         if caller:
-            query = query.where(CallRecord.caller_number.ilike(f"%{caller}%"))
+            safe_caller = caller.replace("%", r"\%").replace("_", r"\_")
+            query = query.where(CallRecord.caller_number.ilike(f"%{safe_caller}%"))
 
         # Count total
         count_query = select(func.count(CallRecord.id))
         if status:
             count_query = count_query.where(CallRecord.status == status)
         if caller:
-            count_query = count_query.where(CallRecord.caller_number.ilike(f"%{caller}%"))
+            safe_caller = caller.replace("%", r"\%").replace("_", r"\_")
+            count_query = count_query.where(CallRecord.caller_number.ilike(f"%{safe_caller}%"))
         total_result = await session.execute(count_query)
         total = total_result.scalar() or 0
 

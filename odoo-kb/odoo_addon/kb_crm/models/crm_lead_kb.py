@@ -11,6 +11,7 @@ import json
 import logging
 
 import requests
+from markupsafe import escape
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -220,19 +221,20 @@ def _mark_processed(kb_url, api_key, call_id, lead_id):
 
 def _build_description(analysis, call_data):
     """Build HTML description for the CRM lead."""
-    products = ", ".join(analysis.get("product_interest", [])) or "N/A"
-    duration = call_data.get("duration_seconds", 0)
+    products = escape(", ".join(analysis.get("product_interest", [])) or "N/A")
+    duration = int(call_data.get("duration_seconds", 0))
+    confidence = float(analysis.get("confidence", 0))
 
     return (
-        f"<b>AI Summary:</b> {analysis.get('summary', 'N/A')}<br/>"
-        f"<b>Intent:</b> {analysis.get('customer_intent', 'N/A')}<br/>"
+        f"<b>AI Summary:</b> {escape(analysis.get('summary', 'N/A'))}<br/>"
+        f"<b>Intent:</b> {escape(analysis.get('customer_intent', 'N/A'))}<br/>"
         f"<b>Products:</b> {products}<br/>"
-        f"<b>Urgency:</b> {analysis.get('urgency', 'N/A')}<br/>"
-        f"<b>Sentiment:</b> {analysis.get('sentiment', 'N/A')}<br/>"
-        f"<b>Suggested Action:</b> {analysis.get('suggested_next_action', 'N/A')}<br/>"
-        f"<b>AI Confidence:</b> {analysis.get('confidence', 0):.0%}<br/>"
+        f"<b>Urgency:</b> {escape(analysis.get('urgency', 'N/A'))}<br/>"
+        f"<b>Sentiment:</b> {escape(analysis.get('sentiment', 'N/A'))}<br/>"
+        f"<b>Suggested Action:</b> {escape(analysis.get('suggested_next_action', 'N/A'))}<br/>"
+        f"<b>AI Confidence:</b> {confidence:.0%}<br/>"
         f"<b>Call Duration:</b> {duration}s<br/>"
-        f"<b>Call UUID:</b> {call_data.get('call_uuid', 'N/A')}"
+        f"<b>Call UUID:</b> {escape(call_data.get('call_uuid', 'N/A'))}"
     )
 
 
@@ -243,11 +245,11 @@ def _build_transcript_html(transcript):
 
     lines = ["<h3>Call Transcript</h3>"]
     for turn in transcript:
-        role = turn.get("role", "unknown")
-        text = turn.get("text", "")
+        role = escape(turn.get("role", "unknown"))
+        text = escape(turn.get("text", ""))
         confidence = turn.get("confidence")
-        style = "color: #2196F3;" if role == "bot" else "color: #333;"
-        conf_str = f" ({confidence:.0%})" if confidence is not None else ""
+        style = "color: #2196F3;" if str(role) == "bot" else "color: #333;"
+        conf_str = f" ({float(confidence):.0%})" if confidence is not None else ""
         lines.append(
             f'<p style="{style}"><b>{role.upper()}</b>{conf_str}: {text}</p>'
         )
