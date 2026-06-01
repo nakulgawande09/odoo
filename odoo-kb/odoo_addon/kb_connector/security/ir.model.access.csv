@@ -3,3 +3,4 @@ access_kb_document_user,kb.document.user,model_kb_document,base.group_user,1,1,1
 access_kb_document_manager,kb.document.manager,model_kb_document,base.group_system,1,1,1,1
 access_kb_voice_agent_user,kb.voice.agent.user,model_kb_voice_agent,base.group_user,1,0,0,0
 access_kb_voice_agent_manager,kb.voice.agent.manager,model_kb_voice_agent,base.group_system,1,1,1,1
+access_kb_test_console_user,kb.test.console.user,model_kb_test_console,base.group_user,1,1,1,1

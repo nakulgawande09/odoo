@@ -38,6 +38,7 @@ CONTENT_TYPE_MAP = {
 
 class KBDocument(models.Model):
     _name = "kb.document"
+    _inherit = ["mail.thread", "mail.activity.mixin"]
     _description = "Knowledge Base Document"
     _order = "write_date desc"
 
@@ -124,7 +125,7 @@ class KBDocument(models.Model):
 
     def action_push_to_kb(self):
         """Push this document's content and attachments to the KB service."""
-        from odoo.addons.kb_connector.tools.kb_client import kb_ingest
+        from odoo.addons.kb_connector.tools.kb_client import kb_ingest, kb_upload_file
 
         for record in self:
             pushed_ids = []
@@ -149,29 +150,54 @@ class KBDocument(models.Model):
 
             # Push each attachment
             for attachment in record.attachment_ids:
-                file_content = base64.b64decode(attachment.datas) if attachment.datas else b""
-                if not file_content:
+                file_bytes = base64.b64decode(attachment.datas) if attachment.datas else b""
+                if not file_bytes:
                     continue
 
                 mimetype = attachment.mimetype or "text/plain"
-                content_type = CONTENT_TYPE_MAP.get(mimetype, "text/plain")
-
-                try:
-                    decoded = file_content.decode("utf-8", errors="replace")
-                except Exception:
-                    decoded = file_content.decode("latin-1", errors="replace")
-
-                result = kb_ingest(
-                    self.env,
-                    content=decoded,
-                    title=f"{record.name} - {attachment.name}",
-                    content_type=content_type,
-                    tags=tag_list,
-                    source_ref=source_ref,
+                is_binary = mimetype in (
+                    "application/pdf",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 )
+
+                if is_binary:
+                    # Upload binary files (PDF, DOCX) as multipart
+                    result = kb_upload_file(
+                        self.env,
+                        file_bytes=file_bytes,
+                        filename=attachment.name or "upload",
+                        title=f"{record.name} - {attachment.name}",
+                        tags=tag_list,
+                        content_type=mimetype,
+                    )
+                else:
+                    # Text-based files can be sent as JSON
+                    content_type = CONTENT_TYPE_MAP.get(mimetype, "text/plain")
+                    try:
+                        decoded = file_bytes.decode("utf-8")
+                    except UnicodeDecodeError:
+                        decoded = file_bytes.decode("latin-1", errors="replace")
+                    result = kb_ingest(
+                        self.env,
+                        content=decoded,
+                        title=f"{record.name} - {attachment.name}",
+                        content_type=content_type,
+                        tags=tag_list,
+                        source_ref=source_ref,
+                    )
+
                 if result:
                     pushed_ids.append(result.get("id", ""))
                     total_chunks += result.get("chunks_count", 0)
+                    logger.info(
+                        "Pushed attachment %s: doc_id=%s, chunks=%d",
+                        attachment.name, result.get("id"), result.get("chunks_count", 0),
+                    )
+                else:
+                    logger.warning(
+                        "Failed to push attachment %s (mimetype=%s, size=%d)",
+                        attachment.name, mimetype, len(file_bytes),
+                    )
 
             if pushed_ids:
                 import json

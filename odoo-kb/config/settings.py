@@ -58,7 +58,9 @@ class Settings(BaseSettings):
 
     # Reranker
     reranker_provider: str = "none"  # "none" | "openai" | "local"
-    reranker_model: str = ""  # e.g. "gpt-4o-mini" or "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_model: str = (
+        ""  # e.g. "gpt-4o-mini" or "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    )
     reranker_top_k: int = 20  # max candidates to rerank
 
     # Query expansion
@@ -84,10 +86,30 @@ class Settings(BaseSettings):
 
     # TTS
     tts_provider: str = "none"  # "none" | "gemini"
-    tts_model: str = "gemini-2.5-flash"
+    tts_model: str = "gemini-2.5-flash-preview-tts"
     tts_voice: str = "Kore"
     tts_language: str = "en-US"
     tts_sample_rate: int = 24000
+
+    # STT (Speech-to-Text, used as fallback when browser STT unavailable)
+    stt_provider: str = "none"  # "none" | "gemini"
+    stt_model: str = "gemini-2.5-flash"
+    stt_language: str = "en-US"
+
+    # Answer generation (RAG)
+    answer_model: str = "gemini-2.5-flash"
+    answer_max_context_chunks: int = 3
+    answer_max_tokens: int = 300
+    answer_temperature: float = 0.3
+
+    # Gemini Live (real-time audio).
+    # Model lives on v1alpha and must support bidiGenerateContent.
+    # Override per-agent in Odoo, or via KB_LIVE_MODEL env var.
+    live_model: str = "gemini-3.1-flash-live-preview"
+    live_voice: str = "Aoede"
+    live_preprocessor_model: str = "gemini-3.1-pro-preview"
+    live_jwt_secret: str = ""
+    live_jwt_ttl_seconds: int = 1800
 
     # Public URL (for webhook eventUrl callbacks, e.g. ngrok URL)
     public_url: str = ""
@@ -114,6 +136,9 @@ class Settings(BaseSettings):
 
     # Filter taxonomy
     filter_taxonomy_path: str = "config/filters.yaml"
+
+    # Domain-specific query expansion synonyms
+    synonyms_path: str = "config/synonyms.yaml"
 
     @field_validator("backend_weights", mode="before")
     @classmethod
@@ -155,7 +180,34 @@ def load_filter_taxonomy(path: str) -> dict[str, Any]:
         return {}
     try:
         import yaml
+
         with open(config_path) as f:
             return yaml.safe_load(f) or {}
     except ImportError:
         return {}
+
+
+def load_synonyms(path: str) -> dict[str, list[str]]:
+    """Load domain-specific query-expansion synonyms from YAML.
+
+    Returns a mapping of canonical term -> list of synonyms. Empty dict if
+    the file is missing or unparseable so the static defaults still apply.
+    """
+    config_path = Path(path)
+    if not config_path.exists():
+        return {}
+    try:
+        import yaml
+
+        with open(config_path) as f:
+            data = yaml.safe_load(f) or {}
+    except ImportError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for key, values in data.items():
+        if not isinstance(values, list):
+            continue
+        out[str(key).lower()] = [str(v) for v in values]
+    return out

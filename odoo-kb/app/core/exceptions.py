@@ -25,5 +25,13 @@ class TTSError(KBError):
     """Error during text-to-speech synthesis."""
 
 
+class STTError(KBError):
+    """Error during speech-to-text transcription."""
+
+
+class AnswerGenerationError(KBError):
+    """Error during RAG answer generation."""
+
+
 class DocumentNotFoundError(KBError):
     """Requested document does not exist."""

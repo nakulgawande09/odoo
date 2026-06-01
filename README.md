@@ -42,3 +42,37 @@ make demo # Start services + seed 5 demo documents
 make demo-search q='return policy' # Search from CLI
 make demo-voip q='shipping info' # Test VOIP webhook
 make clean # Tear down everything
+
+
+Run main Odoo:
+ccd ~/Desktop/me/odoo/odoo
+python odoo-bin --addons-path=addons -d odoo -r odoo -w odoo
+Key flags:
+
+--addons-path=addons — path to addon modules
+-d odoo — database name (auto-created on first run)
+-r odoo / -w odoo — DB username / password
+Then open http://localhost:8069 in your browser.
+
+
+
+```
+python odoo-bin --addons-path=addons,odoo/addons,odoo-kb/odoo_addon -d odoo -r odoo -w odoo --db_host=localhost -i base
+```
+
+Run Addon:
+```
+python -m uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8100
+```
+
+Update kb_connector:
+The button is in the XML. The module just needs to be upgraded. Run:
+
+```
+./odoo-bin -d odoo -u kb_connector --stop-after-init \
+  --db_host=localhost --db_port=5432 --db_user=odoo --db_password=odoo \
+  --addons-path=odoo/addons,addons,odoo-kb/odoo_addon
+
+```
+
+Then restart Odoo normally. The "Test TTS" button (with the speaker icon) will appear in the header between "Test Query" and "Sync to KB Service".

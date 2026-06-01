@@ -128,20 +128,58 @@ class GeminiEmbedder:
 
         import asyncio
         client = self._get_client()
-        try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: client.models.embed_content(
-                    model=self._model,
-                    contents=texts,
-                    config={"output_dimensionality": self._dimensions},
-                ),
-            )
-            return [list(e.values) for e in response.embeddings]
-        except EmbeddingError:
-            raise
-        except Exception as e:
-            raise EmbeddingError(f"Gemini embedding failed: {e}") from e
+
+        # Free-tier quota is per-minute and bursts trigger 429s during bulk
+        # ingestion. Retry honoring the server-suggested retryDelay; cap total
+        # retries so a sustained outage still fails fast.
+        max_attempts = 5
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: client.models.embed_content(
+                        model=self._model,
+                        contents=texts,
+                        config={"output_dimensionality": self._dimensions},
+                    ),
+                )
+                return [list(e.values) for e in response.embeddings]
+            except EmbeddingError:
+                raise
+            except Exception as e:
+                wait = _gemini_retry_delay_seconds(e)
+                if wait is None or attempt >= max_attempts:
+                    raise EmbeddingError(f"Gemini embedding failed: {e}") from e
+                logger.warning(
+                    "Gemini 429 (attempt %d/%d, batch=%d) -- sleeping %.1fs then retrying",
+                    attempt, max_attempts, len(texts), wait,
+                )
+                await asyncio.sleep(wait)
+
+
+def _gemini_retry_delay_seconds(exc: Exception) -> float | None:
+    """Parse a Gemini 429 RESOURCE_EXHAUSTED error and return retry delay.
+
+    Returns None for non-retryable errors so the caller fails fast. Looks at:
+      - JSON `retryDelay` field embedded in the error message
+      - HTTP status code (429) as a fallback signal
+    """
+    import re
+
+    message = str(exc)
+    if "429" not in message and "RESOURCE_EXHAUSTED" not in message:
+        return None
+
+    # Server hints come as `'retryDelay': '15s'` inside the embedded JSON.
+    match = re.search(r"['\"]retryDelay['\"]\s*:\s*['\"]([\d.]+)s['\"]", message)
+    if match:
+        # Add a 1s jitter buffer so we don't slam the server right at the boundary.
+        return float(match.group(1)) + 1.0
+
+    # Fallback: simple exponential-style 30s wait if 429 but no hint.
+    return 30.0
 
 
 def create_embedder(settings: Any) -> OpenAIEmbedder | LocalEmbedder | GeminiEmbedder:

@@ -24,6 +24,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.dependencies import (
+    get_answer_generator,
     get_call_tracker,
     get_crm_analyzer,
     get_orchestrator,
@@ -186,7 +187,23 @@ async def vonage_event(
     )
     search_response = await orchestrator.search(search_request)
 
-    answer, confidence = _build_answer(search_response.results, config)
+    # Use RAG answer generation (LLM synthesis) with extractive fallback
+    answer_gen = get_answer_generator()
+    if answer_gen:
+        try:
+            generated = await answer_gen.generate(
+                query=query,
+                results=search_response.results,
+                agent_name=config.name,
+                config=config,
+            )
+            answer = generated.text
+            confidence = generated.confidence
+        except Exception as e:
+            logger.warning("RAG generation failed in vonage_event, falling back: %s", e)
+            answer, confidence = _build_answer(search_response.results, config)
+    else:
+        answer, confidence = _build_answer(search_response.results, config)
     elapsed_ms = (time.monotonic() - start) * 1000
 
     logger.info(

@@ -1,0 +1,21 @@
+# Domain-specific query expansion synonyms.
+# Loaded by app.core.query_expansion via Settings.synonyms_path.
+# Keys are canonical terms; values are lists of synonyms / aliases / common
+# misspellings. Bidirectional: matching either direction triggers expansion.
+#
+# Tune this file per deployment -- it's the cheapest single lever for
+# improving recall on entity-heavy queries.
+
+# ── KLAY childcare domain ──────────────────────
+klay: [Klay, KLAY]
+klayzo: [Klayzo, playzone, "play zone", play-zone]
+lap: [LAP, "Learning Advancement Plan", "learning advancement"]
+nanny: [nannies, caregiver, caregivers, attendant, attendants]
+training: [onboarding, certification, induction, "training program", trained]
+mandatory: [required, compulsory, "must complete", prerequisite]
+deployment: [placement, posting, assignment, "before joining", onboarding]
+afterschool: [after-school, "after school", ASE, "Afterschool Enrichment", "after-school enrichment"]
+pillar: [pillars, theme, themes, "focus area", "focus areas", category, categories]
+activity: [activities, programme, program, programs]
+enrichment: [enrich, learning, development, "skill building"]
+playzone: [Klayzo, "play zone", play-zone]

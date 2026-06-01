@@ -14,6 +14,15 @@ from app.core.exceptions import TTSError
 
 logger = logging.getLogger(__name__)
 
+GEMINI_VOICES = {"Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda"}
+
+LEGACY_VOICE_MAP: dict[str, str] = {
+    "male": "Charon",
+    "female": "Kore",
+    "neural_male": "Fenrir",
+    "neural_female": "Aoede",
+}
+
 
 class GeminiTTSProvider:
     """Generates speech audio using the Gemini API.
@@ -24,7 +33,7 @@ class GeminiTTSProvider:
 
     def __init__(self, settings: Any) -> None:
         self._api_key = settings.gemini_api_key
-        self._model = getattr(settings, "tts_model", "gemini-2.5-flash")
+        self._model = getattr(settings, "tts_model", "gemini-2.5-flash-preview-tts")
         self._voice = getattr(settings, "tts_voice", "Kore")
         self._language = getattr(settings, "tts_language", "en-US")
         self._sample_rate = getattr(settings, "tts_sample_rate", 24000)
@@ -68,6 +77,14 @@ class GeminiTTSProvider:
 
         client = self._get_client()
         effective_voice = voice or self._voice
+        # Resolve legacy generic voice names to actual Gemini voices
+        if effective_voice in LEGACY_VOICE_MAP:
+            effective_voice = LEGACY_VOICE_MAP[effective_voice]
+        elif effective_voice not in GEMINI_VOICES:
+            logger.warning(
+                "Unknown voice %r, falling back to %s", effective_voice, self._voice,
+            )
+            effective_voice = self._voice
 
         try:
             from google.genai import types

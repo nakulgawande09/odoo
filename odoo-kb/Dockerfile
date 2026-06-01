@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[openai,pdf,html]"
+RUN pip install --no-cache-dir ".[openai,gemini,pdf,html]"
 
 # Copy application
 COPY . .

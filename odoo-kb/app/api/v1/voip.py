@@ -19,13 +19,13 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.api.auth import verify_api_key
 from app.core.voice_agent_config import VoiceAgentConfig, VoiceAgentStore
-from app.dependencies import get_orchestrator, get_query_logger, get_tts_provider, get_voice_agent_store
+from app.dependencies import get_answer_generator, get_orchestrator, get_query_logger, get_tts_provider, get_voice_agent_store
 from app.schemas.search import SearchRequest
 
 logger = logging.getLogger(__name__)
@@ -136,8 +136,25 @@ async def voip_query(
     )
     search_response = await orchestrator.search(search_request)
 
-    # Build TTS-friendly answer using agent config
-    answer, confidence = _build_answer(search_response.results, config)
+    # Generate answer via RAG (LLM synthesis) or fall back to extractive
+    answer_gen = get_answer_generator()
+    if answer_gen:
+        try:
+            generated = await answer_gen.generate(
+                query=request.query,
+                results=search_response.results,
+                agent_name=config.name,
+                config=config,
+            )
+            answer = generated.text
+            confidence = generated.confidence
+        except Exception as e:
+            logger.warning("Answer generation failed, falling back: %s", e)
+            answer, confidence = _build_answer(search_response.results, config)
+    else:
+        logger.info("No answer generator available, using extractive fallback")
+        answer, confidence = _build_answer(search_response.results, config)
+
     sources = [
         VOIPSource(
             title=r.title,
@@ -223,7 +240,24 @@ async def voip_query_audio(
         conversation_id=call_id,
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results, config)
+
+    # Generate answer via RAG or fall back to extractive
+    answer_gen = get_answer_generator()
+    if answer_gen:
+        try:
+            generated = await answer_gen.generate(
+                query=request.query,
+                results=search_response.results,
+                agent_name=config.name,
+                config=config,
+            )
+            answer = generated.text
+            confidence = generated.confidence
+        except Exception as e:
+            logger.warning("Answer generation failed in audio endpoint: %s", e)
+            answer, confidence = _build_answer(search_response.results, config)
+    else:
+        answer, confidence = _build_answer(search_response.results, config)
 
     # Build full response text with optional follow-up
     follow_up = None
@@ -317,7 +351,9 @@ async def twilio_webhook(
         conversation_id=str(call_sid),
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results, config)
+    answer, confidence = await _generate_or_extract(
+        query, search_response.results, config
+    )
 
     if confidence < config.confidence_threshold:
         escalation_msg = config.escalation_message or config.low_confidence_message
@@ -368,7 +404,9 @@ async def vonage_webhook(
         conversation_id=call_uuid,
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results, config)
+    answer, confidence = await _generate_or_extract(
+        query, search_response.results, config
+    )
 
     ncco: list[dict] = [{"action": "talk", "text": answer, "bargeIn": True}]
 
@@ -410,7 +448,9 @@ async def sip_webhook(
         conversation_id=channel or None,
     )
     search_response = await orchestrator.search(search_request)
-    answer, confidence = _build_answer(search_response.results, config)
+    answer, confidence = await _generate_or_extract(
+        query, search_response.results, config
+    )
 
     return {
         "status": "ok",
@@ -424,6 +464,27 @@ async def sip_webhook(
 
 
 # ─── Helpers ──────────────────────────────────────────────────
+
+async def _generate_or_extract(
+    query: str,
+    results: list,
+    config: VoiceAgentConfig | None = None,
+) -> tuple[str, float]:
+    """Try RAG answer generation; fall back to extractive if unavailable."""
+    answer_gen = get_answer_generator()
+    if answer_gen:
+        try:
+            generated = await answer_gen.generate(
+                query=query,
+                results=results,
+                agent_name=config.name if config else None,
+                config=config,
+            )
+            return generated.text, generated.confidence
+        except Exception as e:
+            logger.warning("Answer generation failed, falling back: %s", e)
+    return _build_answer(results, config)
+
 
 def _build_answer(
     results: list, config: VoiceAgentConfig | None = None
@@ -466,6 +527,45 @@ def _suggest_follow_up(intent: str | None) -> str | None:
     }
     return suggestions.get(intent)
 
+
+class TTSTestRequest(BaseModel):
+    """Request to test TTS synthesis without a KB search."""
+    text: str = Field(..., min_length=1, max_length=500, description="Text to synthesize")
+    voice: str | None = None
+    language: str | None = None
+
+
+@router.post("/tts/test")
+async def tts_test(
+    request: TTSTestRequest,
+    _api_key: str | None = Depends(verify_api_key),
+) -> Response:
+    """Synthesize text to audio for testing. No KB search involved."""
+    tts = get_tts_provider()
+    if tts is None:
+        raise HTTPException(
+            status_code=400,
+            detail="TTS provider not configured. Set KB_TTS_PROVIDER=gemini in .env",
+        )
+    try:
+        audio_bytes = await tts.synthesize(
+            text=request.text,
+            voice=request.voice,
+            language=request.language,
+        )
+    except Exception as e:
+        logger.exception("TTS synthesis failed (text=%r voice=%r language=%r)",
+                         request.text, request.voice, request.language)
+        raise HTTPException(status_code=500, detail=f"TTS synthesis failed: {e}")
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/wav",
+        headers={"Content-Disposition": "inline; filename=tts_test.wav"},
+    )
+
+
+# ─── Helpers ──────────────────────────────────────────────────
 
 def _twilio_response(
     text: str, gather: bool = True, config: VoiceAgentConfig | None = None

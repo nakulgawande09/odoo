@@ -23,11 +23,24 @@ VOIP_PROVIDERS = [
 ]
 
 TTS_VOICES = [
-    ("default", "Default"),
-    ("male", "Male"),
-    ("female", "Female"),
-    ("neural_female", "Neural Female (Premium)"),
-    ("neural_male", "Neural Male (Premium)"),
+    ("default", "Default (Kore)"),
+    ("Puck", "Puck (Male, Energetic)"),
+    ("Charon", "Charon (Male, Calm)"),
+    ("Kore", "Kore (Female, Firm)"),
+    ("Fenrir", "Fenrir (Male, Deep)"),
+    ("Aoede", "Aoede (Female, Warm)"),
+    ("Leda", "Leda (Female, Bright)"),
+]
+
+LIVE_VOICES = [
+    ("Aoede", "Aoede (Female, Warm)"),
+    ("Charon", "Charon (Male, Calm)"),
+    ("Fenrir", "Fenrir (Male, Deep)"),
+    ("Kore", "Kore (Female, Firm)"),
+    ("Puck", "Puck (Male, Energetic)"),
+    ("Leda", "Leda (Female, Bright)"),
+    ("Orus", "Orus (Male, Bright)"),
+    ("Zephyr", "Zephyr (Female, Soft)"),
 ]
 
 ESCALATION_MODES = [
@@ -146,6 +159,38 @@ class KBVoiceAgent(models.Model):
         "_tz_list",
         string="Timezone",
         default="UTC",
+    )
+
+    # Gemini Live (real-time audio) settings
+    live_model = fields.Char(
+        "Live Model",
+        help=(
+            "Gemini Live model name (e.g. 'gemini-live-2.5-flash-preview', "
+            "'gemini-2.5-flash-preview-native-audio-dialog'). Leave blank "
+            "to use the FastAPI service's KB_LIVE_MODEL env var. "
+            "Must be a Live API model that supports bidiGenerateContent."
+        ),
+    )
+    system_prompt = fields.Text(
+        "System Prompt (Live)",
+        help=(
+            "Persona, scope, and tone rules for Gemini Live. Appended to the "
+            "auto-assembled system instruction. Leave blank to use the stock "
+            "instruction built from the messages above."
+        ),
+    )
+    live_voice = fields.Selection(
+        LIVE_VOICES,
+        string="Live Voice",
+        default="Aoede",
+        help="Voice used by Gemini Live. Independent of the legacy TTS voice.",
+    )
+    kb_search_instruction = fields.Text(
+        "KB Grounding Rule (Live)",
+        help=(
+            "Override the default 'always call search_kb before factual claims' "
+            "rule. Leave blank to use the stock rule."
+        ),
     )
 
     # Stats (read-only, updated by KB service)
@@ -305,6 +350,17 @@ class KBVoiceAgent(models.Model):
         except requests.exceptions.RequestException as e:
             raise UserError(_("Config sync failed: %s") % str(e))
 
+    def action_test_chat(self):
+        """Open the Test Console with this agent pre-selected."""
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "res_model": "kb.test.console",
+            "view_mode": "form",
+            "target": "current",
+            "context": {"default_agent_id": self.id},
+        }
+
     def _get_agent_config(self):
         """Serialize agent config as dict for the KB service."""
         self.ensure_one()
@@ -326,4 +382,8 @@ class KBVoiceAgent(models.Model):
             "escalation_mode": self.escalation_mode,
             "escalation_number": self.escalation_number,
             "escalation_message": self.escalation_message,
+            "system_prompt": self.system_prompt or "",
+            "live_voice": self.live_voice or "Aoede",
+            "live_model": self.live_model or "",
+            "kb_search_instruction": self.kb_search_instruction or "",
         }

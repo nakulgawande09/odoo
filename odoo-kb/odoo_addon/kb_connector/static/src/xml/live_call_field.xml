@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="kb_connector.LiveCallField">
+        <div class="kb_live_call_field d-flex flex-column gap-2 p-3 border rounded"
+             style="background-color:#fafbfd;">
+            <div class="d-flex align-items-center gap-2">
+                <button type="button"
+                        class="btn btn-success"
+                        t-on-click="onStartCall"
+                        t-att-disabled="isActive or state.status === 'starting'">
+                    <i class="fa fa-phone me-1"/> Start Call
+                </button>
+                <button type="button"
+                        class="btn btn-danger"
+                        t-on-click="onEndCall"
+                        t-att-disabled="state.status === 'idle' or state.status === 'starting'">
+                    <i class="fa fa-phone-slash me-1"/> End Call
+                </button>
+                <div class="ms-3 d-flex align-items-center gap-2">
+                    <span t-if="state.status === 'idle'" class="text-muted">
+                        <i class="fa fa-circle"/> Idle — click Start Call to begin
+                    </span>
+                    <span t-elif="state.status === 'starting'" class="text-info">
+                        <i class="fa fa-spinner fa-spin"/> Starting session…
+                    </span>
+                    <span t-elif="state.status === 'listening'" class="text-danger fw-bold">
+                        <i class="fa fa-microphone"/> Listening…
+                    </span>
+                    <span t-elif="state.status === 'thinking'" class="text-warning">
+                        <i class="fa fa-ellipsis-h"/> Thinking…
+                    </span>
+                    <span t-elif="state.status === 'speaking'" class="text-primary">
+                        <i class="fa fa-volume-up"/> Speaking…
+                    </span>
+                    <span t-elif="state.status === 'ended'" class="text-muted">
+                        <i class="fa fa-check-circle"/> Call ended
+                    </span>
+                    <span t-elif="state.status === 'error'" class="text-danger">
+                        <i class="fa fa-exclamation-triangle"/> Error
+                    </span>
+                </div>
+            </div>
+
+            <div t-if="state.interim"
+                 class="text-muted fst-italic small"
+                 style="padding:4px 12px;">
+                <i class="fa fa-comment-o me-1"/>
+                <t t-esc="state.interim"/>
+            </div>
+
+            <div t-if="state.errorMessage" class="alert alert-warning mb-0 py-2 small">
+                <t t-esc="state.errorMessage"/>
+            </div>
+
+            <div t-if="state.toolCallsInFlight > 0" class="text-muted small fst-italic">
+                <i class="fa fa-search me-1"/> Looking up the knowledge base…
+            </div>
+        </div>
+    </t>
+
+</templates>

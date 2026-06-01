@@ -28,6 +28,7 @@ class CrossEncoderReranker:
         self._model = getattr(settings, "reranker_model", "")
         self._top_k = getattr(settings, "reranker_top_k", 20)
         self._local_model = None
+        self._gemini_client = None
 
     async def rerank(
         self,
@@ -55,6 +56,8 @@ class CrossEncoderReranker:
         try:
             if self._provider == "openai":
                 scores = await self._rerank_openai(query, candidates)
+            elif self._provider == "gemini":
+                scores = await self._rerank_gemini(query, candidates)
             elif self._provider == "local":
                 scores = await self._rerank_local(query, candidates)
             else:
@@ -120,6 +123,72 @@ class CrossEncoderReranker:
         while len(scores) < len(results):
             scores.append(0.0)
         return scores[:len(results)]
+
+    async def _rerank_gemini(
+        self, query: str, results: list[SearchResultItem]
+    ) -> list[float]:
+        """Use Gemini Flash to score query-passage relevance.
+
+        Returns a list of floats in [0.0, 1.0], one per passage in input order.
+        Falls back to zeros (preserving original order) if parsing fails.
+        """
+        import asyncio
+        import json
+
+        from google import genai
+        from google.genai import types
+
+        if self._gemini_client is None:
+            self._gemini_client = genai.Client(api_key=self._settings.gemini_api_key)
+
+        passages = [r.content or r.snippet for r in results]
+        passages_block = "\n\n".join(
+            f"Passage {i + 1}: {p[:500]}" for i, p in enumerate(passages)
+        )
+        prompt = (
+            "Rate how well each passage answers the query, on a scale of 0.0 to 1.0.\n"
+            "1.0 = directly answers the question. 0.0 = unrelated.\n"
+            "Respond with ONLY a JSON object of the form "
+            f'{{"scores": [s1, s2, ..., s{len(passages)}]}} '
+            "in the same order as the passages.\n\n"
+            f"Query: {query}\n\n"
+            f"{passages_block}"
+        )
+
+        model_name = self._model or "gemini-2.5-flash"
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: self._gemini_client.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Content(role="user", parts=[types.Part(text=prompt)]),
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.0,
+                    max_output_tokens=256,
+                ),
+            ),
+        )
+
+        raw = (response.text or "").strip()
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                scores = data.get("scores") or data.get("relevance") or next(
+                    iter(data.values()), []
+                )
+            else:
+                scores = data
+            scores = [float(s) for s in scores]
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            logger.warning("Gemini reranker returned unparseable response %r: %s", raw[:200], e)
+            return [0.0] * len(results)
+
+        while len(scores) < len(results):
+            scores.append(0.0)
+        return scores[: len(results)]
 
     async def _rerank_local(
         self, query: str, results: list[SearchResultItem]

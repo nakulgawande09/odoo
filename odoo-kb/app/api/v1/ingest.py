@@ -54,17 +54,17 @@ async def upload_file(
     pipeline=Depends(get_pipeline),
 ) -> DocumentResponse:
     """Upload a file for ingestion (PDF, CSV, HTML, text, etc.)."""
-    content = await file.read()
+    raw_bytes = await file.read()
     content_type = file.content_type or "application/octet-stream"
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
     request = IngestRequest(
-        content=content.decode("utf-8", errors="replace"),
+        content=raw_bytes.decode("utf-8", errors="replace"),
         content_type=content_type,
         title=title or file.filename or "Uploaded file",
         tags=tag_list,
     )
     try:
-        return await pipeline.ingest(request)
+        return await pipeline.ingest(request, raw_bytes=raw_bytes)
     except IngestionError as e:
         raise HTTPException(status_code=422, detail=str(e))

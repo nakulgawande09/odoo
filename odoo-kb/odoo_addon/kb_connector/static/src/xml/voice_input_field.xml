@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="kb_connector.VoiceInputField">
+        <div class="d-flex align-items-center gap-2 w-100">
+            <div class="flex-grow-1">
+                <CharField t-props="fieldProps"/>
+            </div>
+            <button t-if="state.supported"
+                    type="button"
+                    class="btn"
+                    t-attf-class="btn {{ state.listening ? 'btn-danger' : 'btn-outline-secondary' }}"
+                    t-on-click="toggleMicrophone"
+                    t-att-title="state.listening ? 'Stop listening' : 'Click to speak'">
+                <i t-attf-class="fa {{ state.listening ? 'fa-stop' : 'fa-microphone' }}"/>
+            </button>
+        </div>
+    </t>
+
+</templates>

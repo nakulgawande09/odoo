@@ -26,6 +26,8 @@ _call_tracker: Any = None
 _session_factory: Any = None
 _crm_analyzer: Any = None
 _vonage_messages_client: Any = None
+_answer_generator: Any = None
+_stt_provider: Any = None
 
 
 def set_services(
@@ -42,11 +44,13 @@ def set_services(
     session_factory: Any = None,
     crm_analyzer: Any = None,
     vonage_messages_client: Any = None,
+    answer_generator: Any = None,
+    stt_provider: Any = None,
 ) -> None:
     global _backend, _embedder, _preprocessor, _orchestrator, _pipeline
     global _query_logger, _cache_stats_fn, _voice_agent_store, _tts_provider
     global _call_tracker, _session_factory, _crm_analyzer
-    global _vonage_messages_client
+    global _vonage_messages_client, _answer_generator, _stt_provider
     _backend = backend
     _embedder = embedder
     _preprocessor = preprocessor
@@ -60,6 +64,8 @@ def set_services(
     _session_factory = session_factory
     _crm_analyzer = crm_analyzer
     _vonage_messages_client = vonage_messages_client
+    _answer_generator = answer_generator
+    _stt_provider = stt_provider
 
 
 def get_backend():
@@ -117,3 +123,11 @@ def get_crm_analyzer():
 
 def get_vonage_messages_client():
     return _vonage_messages_client
+
+
+def get_answer_generator():
+    return _answer_generator
+
+
+def get_stt_provider():
+    return _stt_provider

@@ -46,12 +46,17 @@ class StaticQueryExpander:
     """
 
     def __init__(self, synonyms: dict[str, list[str]] | None = None) -> None:
-        self._synonyms = synonyms or DEFAULT_SYNONYMS
+        # Merge defaults with overrides; override values win on key collision.
+        merged = dict(DEFAULT_SYNONYMS)
+        if synonyms:
+            for override_key, override_values in synonyms.items():
+                merged[override_key.lower()] = list(override_values)
+        self._synonyms = merged
         # Build reverse map for bidirectional lookup
         self._reverse: dict[str, str] = {}
         for key, values in self._synonyms.items():
-            for v in values:
-                self._reverse[v.lower()] = key
+            for synonym in values:
+                self._reverse[synonym.lower()] = key
 
     async def expand(self, query: str, max_additions: int = 3) -> str:
         """Add synonym terms to the query.

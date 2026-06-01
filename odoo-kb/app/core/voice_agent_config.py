@@ -39,6 +39,11 @@ class VoiceAgentConfig:
     escalation_mode: str = "transfer"
     escalation_number: str = ""
     escalation_message: str = "Let me connect you with a live agent. Please hold."
+    # Gemini Live extras (optional; populated by Odoo `Sync to KB Service`).
+    system_prompt: str = ""
+    live_voice: str = "Aoede"
+    live_model: str = ""  # blank → fall back to settings.live_model
+    kb_search_instruction: str = ""
 
 
 # Default config used when no agent_id is specified

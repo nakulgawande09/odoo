@@ -18,6 +18,11 @@
                             string="Test Query"
                             class="btn-secondary"
                             icon="fa-microphone"/>
+                    <button name="action_test_chat"
+                            type="object"
+                            string="Test Chat"
+                            class="btn-secondary"
+                            icon="fa-comments"/>
                     <button name="action_sync_config"
                             type="object"
                             string="Sync to KB Service"
@@ -136,7 +141,38 @@
                             </div>
                         </page>
 
-                        <!-- Tab 5: Notes -->
+                        <!-- Tab 5: Live API (Gemini Live) -->
+                        <page string="Live API" name="live">
+                            <group>
+                                <group string="Model">
+                                    <field name="live_model"
+                                           placeholder="gemini-live-2.5-flash-preview"/>
+                                </group>
+                                <group string="Voice">
+                                    <field name="live_voice"/>
+                                </group>
+                            </group>
+                            <group string="System Prompt (optional)">
+                                <field name="system_prompt"
+                                       nolabel="1"
+                                       placeholder="Persona, scope, and tone rules. Leave blank for stock instruction."/>
+                            </group>
+                            <group string="KB Grounding Rule (optional)">
+                                <field name="kb_search_instruction"
+                                       nolabel="1"
+                                       placeholder="Override the default 'always call search_kb' rule. Leave blank for stock rule."/>
+                            </group>
+                            <div class="alert alert-info" role="alert">
+                                <strong>How this works:</strong>
+                                Gemini Live owns the entire voice pipeline — STT, LLM, and TTS in
+                                a single low-latency session. KB grounding stays deterministic
+                                because the model is required to call <code>search_kb</code> before
+                                any factual claim. Query rewriting, language normalization, and
+                                intent extraction happen server-side inside the tool handler.
+                            </div>
+                        </page>
+
+                        <!-- Tab 6: Notes -->
                         <page string="Notes" name="notes">
                             <field name="notes" placeholder="Internal notes about this voice agent..."/>
                         </page>

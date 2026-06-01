@@ -17,6 +17,7 @@ from app.core.query_logger import QueryLogger
 from app.core.query_preprocessor import create_preprocessor
 from app.core.reranker import create_reranker
 from app.core.search_service import SearchOrchestrator
+from app.core.stt import create_stt_provider
 from app.core.tts import create_tts_provider
 from app.core.voice_agent_config import VoiceAgentStore
 from app.dependencies import get_settings, set_services
@@ -79,8 +80,14 @@ async def lifespan(app: FastAPI):
         ttl_seconds=settings.conversation_ttl_seconds
     )
 
-    # Create query expander
-    query_expander = create_query_expander(settings)
+    # Create query expander (with domain synonyms from config/synonyms.yaml)
+    from config.settings import load_synonyms
+
+    domain_synonyms = load_synonyms(settings.synonyms_path)
+    if domain_synonyms:
+        logger.info("Loaded %d domain synonym groups from %s",
+                    len(domain_synonyms), settings.synonyms_path)
+    query_expander = create_query_expander(settings, synonyms=domain_synonyms or None)
 
     # Create query logger
     session_factory = None
@@ -124,6 +131,17 @@ async def lifespan(app: FastAPI):
     tts_provider = create_tts_provider(settings)
     if tts_provider:
         logger.info("TTS provider initialized: %s", tts_provider.provider_name)
+
+    # STT provider (optional — fallback for browsers without Web Speech API)
+    stt_provider = create_stt_provider(settings)
+    if stt_provider:
+        logger.info("STT provider initialized: %s", stt_provider.provider_name)
+
+    # Answer generator (RAG — requires Gemini API key)
+    from app.core.answer_generator import create_answer_generator
+    answer_generator = create_answer_generator(settings)
+    if answer_generator:
+        logger.info("Answer generator initialized (model=%s)", settings.answer_model)
 
     # Cache stats aggregator
     def cache_stats():
@@ -172,6 +190,8 @@ async def lifespan(app: FastAPI):
         session_factory=session_factory,
         crm_analyzer=crm_analyzer,
         vonage_messages_client=vonage_messages_client,
+        answer_generator=answer_generator,
+        stt_provider=stt_provider,
     )
 
     logger.info(

@@ -1,6 +1,6 @@
 {
     "name": "Knowledge Base Connector",
-    "version": "19.0.2.0.0",
+    "version": "19.0.2.2.0",
     "category": "Productivity",
     "summary": "Connect Odoo to the Knowledge Base microservice with VOIP support",
     "description": """
@@ -19,7 +19,23 @@
         "views/kb_document_views.xml",
         "views/kb_voice_agent_views.xml",
         "views/res_config_settings_views.xml",
+        "wizard/kb_test_console_views.xml",
     ],
+    "assets": {
+        "web.assets_backend": [
+            "kb_connector/static/src/js/voice_input_field.js",
+            "kb_connector/static/src/xml/voice_input_field.xml",
+            "kb_connector/static/src/js/auto_tts_field.js",
+            "kb_connector/static/src/xml/auto_tts_field.xml",
+            "kb_connector/static/src/js/live_call_field.js",
+            "kb_connector/static/src/xml/live_call_field.xml",
+        ],
+        # Note: live_audio_worklet.js is intentionally NOT in any asset
+        # bundle — AudioWorklet modules must be loaded standalone by URL
+        # (audioContext.audioWorklet.addModule), not as part of a bundle.
+        # Odoo serves files under static/ automatically, so the worklet
+        # is reachable at /kb_connector/static/src/js/live_audio_worklet.js.
+    },
     "installable": True,
     "auto_install": False,
     "license": "LGPL-3",

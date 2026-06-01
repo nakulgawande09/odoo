@@ -149,12 +149,10 @@
                 <filter string="Failed" name="failed"
                         domain="[('kb_status', '=', 'failed')]"/>
                 <separator/>
-                <group expand="0" string="Group By">
-                    <filter string="Type" name="group_type"
-                            context="{'group_by': 'document_type'}"/>
-                    <filter string="Status" name="group_status"
-                            context="{'group_by': 'kb_status'}"/>
-                </group>
+                <filter string="Type" name="group_type"
+                        context="{'group_by': 'document_type'}"/>
+                <filter string="Status" name="group_status"
+                        context="{'group_by': 'kb_status'}"/>
             </search>
         </field>
     </record>

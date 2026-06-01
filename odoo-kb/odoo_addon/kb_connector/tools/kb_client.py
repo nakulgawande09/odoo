@@ -88,6 +88,38 @@ def kb_ingest(env, content, title=None, content_type="text/plain",
         return None
 
 
+def kb_upload_file(env, file_bytes, filename, title=None, tags=None,
+                   content_type="application/octet-stream"):
+    """Upload a binary file (PDF, etc.) to the knowledge base."""
+    url, api_key = _get_config(env)
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    files = {"file": (filename, file_bytes, content_type)}
+    data = {}
+    if title:
+        data["title"] = title
+    if tags:
+        data["tags"] = ",".join(tags)
+    try:
+        resp = requests.post(
+            f"{url}/v1/documents/upload",
+            files=files,
+            data=data,
+            headers=headers,
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.HTTPError as e:
+        detail = e.response.text if e.response is not None else str(e)
+        logger.error("KB file upload HTTP error: %s — %s", e, detail)
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error("KB file upload error: %s", e)
+        return None
+
+
 def kb_delete(env, document_id):
     """Delete a document from the knowledge base."""
     url, api_key = _get_config(env)

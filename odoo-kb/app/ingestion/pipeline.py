@@ -43,7 +43,9 @@ class IngestionPipeline:
         self.embedder = embedder
         self.chunker = chunker or RecursiveChunker()
 
-    async def ingest(self, request: IngestRequest) -> DocumentResponse:
+    async def ingest(
+        self, request: IngestRequest, raw_bytes: bytes | None = None
+    ) -> DocumentResponse:
         doc_id = str(uuid.uuid4())
         title = request.title or "Untitled"
 
@@ -60,11 +62,16 @@ class IngestionPipeline:
 
         try:
             # 2. Extract text content
-            raw_content = request.content or ""
+            raw_content: str | bytes = request.content or ""
             if request.url:
                 raw_content = await self._fetch_url(request.url)
                 if request.content_type == "text/plain":
                     request.content_type = "text/html"
+
+            # For binary formats (PDF), use raw bytes to avoid encoding corruption
+            _BINARY_TYPES = {"application/pdf"}
+            if raw_bytes and request.content_type in _BINARY_TYPES:
+                raw_content = raw_bytes
 
             extractors = _get_extractors()
             extractor = extractors.get(request.content_type)

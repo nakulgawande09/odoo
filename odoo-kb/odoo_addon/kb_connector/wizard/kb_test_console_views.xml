@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Test Console Form View -->
+    <record id="kb_test_console_view_form" model="ir.ui.view">
+        <field name="name">kb.test.console.form</field>
+        <field name="model">kb.test.console</field>
+        <field name="arch" type="xml">
+            <form string="Test Console" create="false" delete="false">
+                <field name="last_response_text" widget="auto_tts" invisible="1"/>
+                <field name="call_id" invisible="1"/>
+                <field name="session_call_uuid" invisible="1"/>
+
+                <group>
+                    <group>
+                        <field name="agent_id"
+                               options="{'no_create': True, 'no_open': True}"/>
+                        <field name="mode" widget="radio" options="{'horizontal': True}"/>
+                        <field name="record_as_real_call"/>
+                    </group>
+                    <group>
+                        <div class="d-flex gap-2">
+                            <button name="action_reset" type="object"
+                                    string="New Conversation"
+                                    class="btn-secondary btn-sm"
+                                    icon="fa-refresh"/>
+                            <button name="action_play_last_tts" type="object"
+                                    string="Play Last Response"
+                                    class="btn-secondary btn-sm"
+                                    icon="fa-volume-up"
+                                    invisible="not last_response_text or mode != 'text'"/>
+                            <button name="action_end_session" type="object"
+                                    string="End &amp; Analyze"
+                                    class="btn-warning btn-sm"
+                                    icon="fa-stop-circle"
+                                    invisible="not session_call_uuid or mode == 'voice'"/>
+                        </div>
+                    </group>
+                </group>
+
+                <!-- Voice Call Panel — only visible in voice mode -->
+                <div invisible="mode != 'voice'" style="margin:0 16px 12px 16px;">
+                    <field name="session_call_uuid"
+                           widget="live_call"
+                           nolabel="1"/>
+                </div>
+
+                <!-- Conversation feed — shared across text + voice modes -->
+                <div style="max-height:500px;overflow-y:auto;border:1px solid #ddd;
+                            border-radius:8px;padding:16px;margin:0 16px 12px 16px;
+                            background-color:#fafafa;">
+                    <field name="conversation_html" nolabel="1"/>
+                </div>
+
+                <!-- Call Summary panel — populated after End &amp; Analyze -->
+                <div invisible="not call_summary_html" style="margin:0 16px 12px 16px;">
+                    <field name="call_summary_html" nolabel="1"/>
+                </div>
+
+                <!-- Text chat input — only visible in text mode -->
+                <group invisible="mode != 'text'">
+                    <div class="d-flex gap-2 align-items-end" style="margin:0 16px;">
+                        <field name="user_input"
+                               placeholder="Type or click the mic to speak..."
+                               string="Message"
+                               widget="voice_input"
+                               class="flex-grow-1"/>
+                        <button name="action_send" type="object"
+                                string="Send" class="btn-primary"
+                                icon="fa-paper-plane"/>
+                    </div>
+                </group>
+            </form>
+        </field>
+    </record>
+
+    <!-- Test Console Action -->
+    <record id="kb_test_console_action" model="ir.actions.act_window">
+        <field name="name">Test Console</field>
+        <field name="res_model">kb.test.console</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Test your Voice Agent
+            </p>
+            <p>
+                Simulate a caller conversation to test knowledge base answers,
+                TTS output, and triage behavior before deploying.
+                Switch between Text Chat and Voice Call modes at any time.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu Item -->
+    <menuitem id="kb_menu_test_console"
+              name="Test Console"
+              parent="kb_menu_root"
+              action="kb_test_console_action"
+              sequence="15"/>
+
+</odoo>
